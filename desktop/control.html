@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' file: data:; img-src 'self' file: data:; style-src 'self' 'unsafe-inline'; script-src 'self';">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GIF Mouse Follower</title>
+  <link rel="stylesheet" href="./control.css">
+</head>
+<body>
+  <main class="app-shell">
+    <section class="hero">
+      <p class="eyebrow">macOS 桌面版</p>
+      <h1>GIF 鼠标跟随</h1>
+      <p>启动后切换到任意软件，GIF 都会继续跟随鼠标。悬浮层置顶显示，并且不会阻挡点击。</p>
+    </section>
+
+    <section class="panel">
+      <!-- 预览卡片 -->
+      <div class="preview-card">
+        <img id="previewImage" alt="当前 GIF 预览">
+        <div class="preview-info">
+          <strong id="currentName">线条小狗</strong>
+          <span id="statusText">跟随已开启</span>
+        </div>
+      </div>
+
+      <!-- 主操作 -->
+      <button class="add-button" id="chooseGifButton" type="button">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        添加 GIF 到本地库
+      </button>
+      <p class="tip" id="fileTip">选择后会自动加入本地 GIF 库，原文件删除后也能继续使用。</p>
+
+      <!-- 开关组 -->
+      <div class="card">
+        <label class="switch-row">
+          <span>
+            <strong>全局跟随</strong>
+            <small>关闭后桌面 GIF 会隐藏</small>
+          </span>
+          <input id="enabledInput" class="switch-input" type="checkbox">
+          <span class="switch-ui" aria-hidden="true"></span>
+        </label>
+
+        <div class="mode-group">
+          <span>
+            <strong>白底处理模式</strong>
+            <small>根据 GIF 类型选择最合适的透明化方式</small>
+          </span>
+          <div class="mode-options">
+            <label class="mode-option">
+              <input type="radio" name="removeBackgroundMode" value="off" id="modeOff">
+              <span>关闭</span>
+            </label>
+            <label class="mode-option">
+              <input type="radio" name="removeBackgroundMode" value="smart" id="modeSmart">
+              <span>智能抠背景</span>
+            </label>
+            <label class="mode-option">
+              <input type="radio" name="removeBackgroundMode" value="preserve-white" id="modePreserve">
+              <span>保留白色</span>
+            </label>
+            <label class="mode-option">
+              <input type="radio" name="removeBackgroundMode" value="pick-color" id="modePickColor">
+              <span>手动取色</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="pick-color-area" id="pickColorArea" style="display:none;">
+          <p class="tip">点击 GIF 预览图上的背景区域，自动去除该颜色</p>
+          <div class="color-preview" id="colorPreview"></div>
+          <p class="tip" id="pickColorTip"></p>
+          <div class="field-group tolerance-field">
+            <div class="range-label">
+              <label for="toleranceInput">颜色容差</label>
+              <output id="toleranceValue">30</output>
+            </div>
+            <input id="toleranceInput" type="range" min="0" max="100" step="1">
+            <p class="tip">容差越小，抠除范围越精准；容差为 0 时只去除完全匹配的颜色</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 调节组 -->
+      <div class="card">
+        <div class="field-group">
+          <div class="range-label">
+            <label for="sizeInput">GIF 大小</label>
+            <output id="sizeValue">72px</output>
+          </div>
+          <input id="sizeInput" type="range" min="20" max="200" step="1">
+        </div>
+
+        <div class="field-grid">
+          <div class="field-group">
+            <div class="range-label">
+              <label for="offsetXInput">X 偏移</label>
+              <output id="offsetXValue">28px</output>
+            </div>
+            <input id="offsetXInput" type="range" min="-160" max="160" step="1">
+          </div>
+
+          <div class="field-group">
+            <div class="range-label">
+              <label for="offsetYInput">Y 偏移</label>
+              <output id="offsetYValue">28px</output>
+            </div>
+            <input id="offsetYInput" type="range" min="-160" max="160" step="1">
+          </div>
+        </div>
+
+        <div class="field-group">
+          <div class="range-label">
+            <label for="opacityInput">透明度</label>
+            <output id="opacityValue">100%</output>
+          </div>
+          <input id="opacityInput" type="range" min="20" max="100" step="1">
+        </div>
+      </div>
+
+      <!-- 预设 -->
+      <div class="card">
+        <p class="group-title">可爱预设</p>
+        <div class="preset-grid" id="presetGrid"></div>
+      </div>
+
+      <!-- 本地库 -->
+      <div class="card">
+        <p class="group-title">本地 GIF 库</p>
+        <div class="library-grid" id="libraryGrid"></div>
+        <p class="tip">这里的 GIF 已复制进应用本地库，原始文件删除也不会丢失。</p>
+      </div>
+
+      <button class="reset-button" id="resetButton" type="button">恢复默认设置</button>
+    </section>
+  </main>
+
+  <script src="./control.js"></script>
+</body>
+</html>

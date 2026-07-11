@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="一个纯 HTML、CSS、JavaScript 实现的 GIF 鼠标跟随自定义工具，支持上传、自定义参数、状态保存和 GitHub Pages 部署。">
+  <title>GIF 鼠标跟随自定义工具</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <main class="page-shell">
+    <section class="hero-card" aria-labelledby="page-title">
+      <p class="eyebrow">gif-mouse-follower</p>
+      <h1 id="page-title">GIF 鼠标跟随自定义工具</h1>
+      <p class="hero-text">
+        上传你喜欢的 GIF，或选择内置可爱预设，让它以柔和、轻盈的动画跟随鼠标移动。
+        所有设置都会自动保存在本机浏览器中，刷新后也能恢复。
+      </p>
+      <div class="hero-actions">
+        <button class="primary-button" id="toggleFromHero" type="button">开启跟随</button>
+        <span class="hint">移动鼠标即可预览效果</span>
+      </div>
+    </section>
+
+    <section class="info-grid" aria-label="功能说明">
+      <article class="info-card">
+        <span class="info-icon">01</span>
+        <h2>平滑跟随</h2>
+        <p>使用 requestAnimationFrame 实现缓动跟随，GIF 位于最上层且不会阻挡页面点击。</p>
+      </article>
+      <article class="info-card">
+        <span class="info-icon">02</span>
+        <h2>自由定制</h2>
+        <p>支持上传本地 GIF，调整大小、偏移、透明度，并可一键切换预设。</p>
+      </article>
+      <article class="info-card">
+        <span class="info-icon">03</span>
+        <h2>即开即用</h2>
+        <p>纯静态单页项目，无框架、无依赖、无后端，天然适配 GitHub Pages。</p>
+      </article>
+    </section>
+  </main>
+
+  <img id="gifFollower" class="gif-follower" src="./assets/line-dog.gif" alt="" aria-hidden="true">
+
+  <aside class="control-panel" id="controlPanel" aria-label="GIF 鼠标跟随控制面板">
+    <button class="panel-header" id="panelToggle" type="button" aria-expanded="true" aria-controls="panelBody">
+      <span>
+        <strong>自定义面板</strong>
+        <small id="panelStatus">跟随已开启</small>
+      </span>
+      <span class="chevron" aria-hidden="true"></span>
+    </button>
+
+    <div class="panel-body" id="panelBody">
+      <div class="preview-card">
+        <img id="previewImage" src="./assets/line-dog.gif" alt="当前 GIF 预览">
+        <div>
+          <p class="preview-title" id="currentName">线条小狗</p>
+          <p class="preview-subtitle">当前跟随 GIF</p>
+        </div>
+      </div>
+
+      <label class="switch-row">
+        <span>
+          <strong>跟随功能</strong>
+          <small>关闭后 GIF 会隐藏</small>
+        </span>
+        <input id="enabledInput" class="switch-input" type="checkbox" checked>
+        <span class="switch-ui" aria-hidden="true"></span>
+      </label>
+
+      <div class="field-group">
+        <label for="gifUpload">上传本地 GIF</label>
+        <input id="gifUpload" class="file-input" type="file" accept="image/gif,image/*">
+        <p class="field-tip" id="uploadTip">上传后会实时预览，并尽量保存到本机浏览器。</p>
+      </div>
+
+      <div class="field-group">
+        <div class="range-label">
+          <label for="sizeInput">GIF 大小</label>
+          <output id="sizeValue" for="sizeInput">72px</output>
+        </div>
+        <input id="sizeInput" type="range" min="20" max="200" step="1" value="72">
+      </div>
+
+      <div class="field-grid">
+        <div class="field-group">
+          <div class="range-label">
+            <label for="offsetXInput">X 偏移</label>
+            <output id="offsetXValue" for="offsetXInput">28px</output>
+          </div>
+          <input id="offsetXInput" type="range" min="-120" max="120" step="1" value="28">
+        </div>
+        <div class="field-group">
+          <div class="range-label">
+            <label for="offsetYInput">Y 偏移</label>
+            <output id="offsetYValue" for="offsetYInput">28px</output>
+          </div>
+          <input id="offsetYInput" type="range" min="-120" max="120" step="1" value="28">
+        </div>
+      </div>
+
+      <div class="field-group">
+        <div class="range-label">
+          <label for="opacityInput">透明度</label>
+          <output id="opacityValue" for="opacityInput">100%</output>
+        </div>
+        <input id="opacityInput" type="range" min="20" max="100" step="1" value="100">
+      </div>
+
+      <div class="field-group">
+        <p class="group-title">可爱预设 GIF</p>
+        <div class="preset-grid" id="presetGrid" role="list"></div>
+      </div>
+
+      <button class="reset-button" id="resetButton" type="button">恢复默认设置</button>
+    </div>
+  </aside>
+
+  <script src="./app.js"></script>
+</body>
+</html>

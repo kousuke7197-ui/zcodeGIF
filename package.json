@@ -1,0 +1,67 @@
+{
+  "name": "gif-mouse-follower",
+  "version": "1.1.0",
+  "description": "GIF 鼠标跟随工具：支持 GitHub Pages 网页版，也支持 macOS 全局桌面悬浮版。",
+  "main": "desktop/main.js",
+  "author": "gif-mouse-follower",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist:mac": "electron-builder --mac dmg zip --arm64 --x64"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.gifmousefollower.app",
+    "productName": "GIF Mouse Follower",
+    "copyright": "Copyright © 2026",
+    "asar": true,
+    "files": [
+      "desktop/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.entertainment",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "title": "GIF Mouse Follower",
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    }
+  },
+  "allowScripts": {
+    "electron@31.7.7": true
+  }
+}
