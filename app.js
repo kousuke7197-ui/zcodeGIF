@@ -102,6 +102,81 @@
     }, 200);
   }
 
+  // ===== IndexedDB 图片存储 =====
+  // 上传的图片以 Blob 存 IndexedDB（容量远大于 localStorage 的 ~5MB 配额），
+  // settings.src 只保存 "idb:custom" 标记，localStorage 里不再有巨型 dataURL。
+  const IDB_NAME = "gifMouseFollowerDB";
+  const IDB_STORE = "images";
+  const IDB_CUSTOM_KEY = "custom";
+  const IDB_SRC_PREFIX = "idb:";
+  const IDB_CUSTOM_SRC = IDB_SRC_PREFIX + IDB_CUSTOM_KEY;
+
+  let idbObjectUrl = "";
+
+  function isIdbSrc(src) {
+    return typeof src === "string" && src.startsWith(IDB_SRC_PREFIX);
+  }
+
+  function openImageDB() {
+    return new Promise((resolve, reject) => {
+      if (!("indexedDB" in window)) {
+        reject(new Error("当前浏览器不支持 IndexedDB"));
+        return;
+      }
+      const request = indexedDB.open(IDB_NAME, 1);
+      request.onupgradeneeded = () => {
+        request.result.createObjectStore(IDB_STORE);
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async function saveImageToDB(blob) {
+    const db = await openImageDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, "readwrite");
+      tx.objectStore(IDB_STORE).put(blob, IDB_CUSTOM_KEY);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  async function loadImageFromDB() {
+    const db = await openImageDB();
+    return new Promise((resolve, reject) => {
+      const request = db.transaction(IDB_STORE, "readonly").objectStore(IDB_STORE).get(IDB_CUSTOM_KEY);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  function readFileAsDataURL(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.addEventListener("load", () => resolve(String(reader.result || "")));
+      reader.addEventListener("error", () => reject(reader.error || new Error("读取文件失败")));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // 上传统一入口：优先 IndexedDB，不可用时回退 dataURL
+  async function applyUploadedFile(file, successTip) {
+    try {
+      await saveImageToDB(file);
+      if (idbObjectUrl) URL.revokeObjectURL(idbObjectUrl);
+      idbObjectUrl = URL.createObjectURL(file);
+      settings.src = IDB_CUSTOM_SRC;
+    } catch (error) {
+      console.warn("IndexedDB 存储失败，回退到 dataURL。", error);
+      settings.src = await readFileAsDataURL(file);
+    }
+    settings.name = file.name || "本地 GIF";
+    settings.presetId = "custom";
+    applySettings(true);
+    dom.uploadTip.textContent = successTip;
+  }
+
   function clampNumber(value, min, max, fallback) {
     const number = Number(value);
     if (!Number.isFinite(number)) {
@@ -131,10 +206,12 @@
   function applySettings(shouldSave) {
     normalizeSettings();
 
-    if (currentSrc !== settings.src) {
-      dom.follower.src = settings.src;
-      dom.preview.src = settings.src;
-      currentSrc = settings.src;
+    // idb: 标记需要换成运行时的 objectURL 才能赋给 <img>
+    const displaySrc = isIdbSrc(settings.src) ? idbObjectUrl : settings.src;
+    if (displaySrc && currentSrc !== displaySrc) {
+      dom.follower.src = displaySrc;
+      dom.preview.src = displaySrc;
+      currentSrc = displaySrc;
     }
 
     dom.currentName.textContent = settings.name;
@@ -354,22 +431,10 @@
       return;
     }
 
-    const reader = new FileReader();
-
-    reader.addEventListener("load", () => {
-      const result = String(reader.result || "");
-      settings.src = result;
-      settings.name = file.name || "本地 GIF";
-      settings.presetId = "custom";
-      applySettings(true);
-      dom.uploadTip.textContent = "本地图片已应用。";
-    });
-
-    reader.addEventListener("error", () => {
+    applyUploadedFile(file, "本地图片已应用。").catch((error) => {
+      console.warn(error);
       dom.uploadTip.textContent = "读取文件失败，请换一个 GIF 再试。";
     });
-
-    reader.readAsDataURL(file);
   }
 
   function bindEvents() {
@@ -495,22 +560,38 @@
       if (!file || !file.type.startsWith("image/")) {
         return;
       }
-      const reader = new FileReader();
-      reader.addEventListener("load", () => {
-        settings.src = String(reader.result || "");
-        settings.name = file.name || "本地 GIF";
-        settings.presetId = "custom";
-        applySettings(true);
-        dom.uploadTip.textContent = "拖拽上传成功！";
+      applyUploadedFile(file, "拖拽上传成功！").catch((error) => {
+        console.warn(error);
+        dom.uploadTip.textContent = "读取文件失败，请换一个 GIF 再试。";
       });
-      reader.readAsDataURL(file);
     });
   }
 
-  function init() {
+  async function init() {
     renderPresetButtons();
     bindEvents();
     createParticleCanvas();
+
+    // 恢复上次上传的图片：settings.src 是 idb: 标记时，从 IndexedDB 取出 Blob 生成 objectURL
+    if (isIdbSrc(settings.src)) {
+      try {
+        const blob = await loadImageFromDB();
+        if (blob) {
+          idbObjectUrl = URL.createObjectURL(blob);
+        } else {
+          // IndexedDB 数据已被清理，回退到默认预设
+          settings.src = DEFAULT_SETTINGS.src;
+          settings.name = DEFAULT_SETTINGS.name;
+          settings.presetId = DEFAULT_SETTINGS.presetId;
+        }
+      } catch (error) {
+        console.warn("读取 IndexedDB 图片失败，回退到默认预设。", error);
+        settings.src = DEFAULT_SETTINGS.src;
+        settings.name = DEFAULT_SETTINGS.name;
+        settings.presetId = DEFAULT_SETTINGS.presetId;
+      }
+    }
+
     applySettings(false);
     animateFollower();
   }

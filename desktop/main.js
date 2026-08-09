@@ -51,6 +51,70 @@ function sanitizeFileName(name) {
     .slice(0, 80);
 }
 
+// 支持的图片类型：扩展名白名单 + 魔数嗅探 + 大小上限
+const IMAGE_EXTENSIONS = new Set([".gif", ".png", ".jpg", ".jpeg", ".webp"]);
+const MAX_IMAGE_BYTES = 50 * 1024 * 1024; // 50MB
+
+function sniffImageType(filePath) {
+  let fd;
+  try {
+    fd = fs.openSync(filePath, "r");
+    const head = Buffer.alloc(16);
+    const read = fs.readSync(fd, head, 0, 16, 0);
+    if (read < 4) return null;
+    // GIF87a / GIF89a
+    if (head.toString("ascii", 0, 3) === "GIF") return "gif";
+    // PNG
+    if (head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47) return "png";
+    // JPEG
+    if (head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) return "jpg";
+    // WebP (RIFF....WEBP)
+    if (read >= 12 && head.toString("ascii", 0, 4) === "RIFF" && head.toString("ascii", 8, 12) === "WEBP") return "webp";
+    return null;
+  } catch (_) {
+    return null;
+  } finally {
+    if (fd !== undefined) {
+      try { fs.closeSync(fd); } catch (_) { /* 忽略 */ }
+    }
+  }
+}
+
+/**
+ * 校验待入库的图片文件：路径存在、扩展名白名单、魔数匹配、大小不超限。
+ * 返回 { ok: true } 或 { ok: false, error: string }。
+ */
+function validateImageFile(filePath) {
+  if (typeof filePath !== "string" || !filePath) {
+    return { ok: false, error: "非法文件路径" };
+  }
+  let stat;
+  try {
+    stat = fs.statSync(filePath);
+  } catch (_) {
+    return { ok: false, error: "文件不存在" };
+  }
+  if (!stat.isFile()) {
+    return { ok: false, error: "目标不是文件" };
+  }
+  const ext = path.extname(filePath).toLowerCase();
+  if (!IMAGE_EXTENSIONS.has(ext)) {
+    return { ok: false, error: "仅支持 GIF/PNG/JPG/WebP 图片" };
+  }
+  if (stat.size > MAX_IMAGE_BYTES) {
+    return { ok: false, error: "图片超过 50MB 上限" };
+  }
+  const sniffed = sniffImageType(filePath);
+  if (!sniffed) {
+    return { ok: false, error: "文件内容不是有效的图片" };
+  }
+  // 扩展名与内容不一致时以内容为准（如 .gif 后缀的 PNG），仅拦截明显冒充
+  if (ext === ".gif" && sniffed !== "gif") {
+    return { ok: false, error: "文件内容与扩展名不符" };
+  }
+  return { ok: true };
+}
+
 function defaultSettings() {
   return {
     enabled: true,
@@ -269,6 +333,7 @@ function updateSettings(patch) {
   settings = normalizeSettings({ ...settings, ...(patch || {}) });
   saveSettings();
   broadcastSettings();
+  syncCursorPolling();
   return settings;
 }
 
@@ -411,14 +476,40 @@ function startCursorPolling() {
   }, 16);
 }
 
+function stopCursorPolling() {
+  if (cursorTimer) {
+    clearInterval(cursorTimer);
+    cursorTimer = null;
+  }
+}
+
+// 根据 enabled 状态启停光标轮询：跟随关闭期间不做 60Hz 轮询
+function syncCursorPolling() {
+  if (settings && settings.enabled) {
+    if (!cursorTimer) startCursorPolling();
+  } else {
+    stopCursorPolling();
+  }
+}
+
 function startMouseClickMonitor() {
   if (process.platform !== "darwin") return;
   if (mouseMonitorProcess) return;
 
+  // 优先使用构建期预编译的二进制（不依赖用户机器上的 swift 工具链，启动快）；
+  // 二进制不存在时（如开发环境直接 npm start）回退到 swift 现场编译
+  const binaryPath = path.join(__dirname, "mouse-click-monitor");
   const swiftPath = path.join(__dirname, "mouse-click-monitor.swift");
+  const useBinary = fs.existsSync(binaryPath);
+  const command = useBinary ? binaryPath : "swift";
+  const args = useBinary ? [] : [swiftPath];
+
+  if (!useBinary) {
+    logger.info("未找到预编译点击监听二进制，回退到 swift 现场编译（打包前可运行 scripts/compile-click-monitor.sh）");
+  }
 
   try {
-    mouseMonitorProcess = execFile("swift", [swiftPath], {
+    mouseMonitorProcess = execFile(command, args, {
       maxBuffer: 1024 * 1024
     });
 
@@ -593,6 +684,11 @@ function registerIpc() {
 
       const source = result.filePaths[0];
       logger.info("已选择文件:", source);
+      const validation = validateImageFile(source);
+      if (!validation.ok) {
+        logger.warn("文件校验未通过:", validation.error);
+        return settings;
+      }
       const item = copyGifToLibrary(source);
       const library = loadLibrary();
       library.unshift(item);
@@ -750,14 +846,10 @@ function registerIpc() {
   });
 
   ipcMain.handle("library:addFile", (_event, filePath) => {
-    if (typeof filePath !== "string" || !filePath) {
-      logger.warn("library:addFile 收到非法文件路径");
-      return { success: false, error: "非法文件路径" };
-    }
-
-    if (!fs.existsSync(filePath)) {
-      logger.warn("library:addFile 文件不存在:", filePath);
-      return { success: false, error: "文件不存在" };
+    const validation = validateImageFile(filePath);
+    if (!validation.ok) {
+      logger.warn("library:addFile 校验未通过:", validation.error, filePath);
+      return { success: false, error: validation.error };
     }
 
     try {
@@ -876,7 +968,7 @@ if (!gotTheLock) {
     createControlWindow();
     createTray();
     registerGlobalShortcuts();
-    startCursorPolling();
+    syncCursorPolling();
     startMouseClickMonitor();
 
     screen.on("display-added", recreateOverlays);
@@ -888,7 +980,7 @@ if (!gotTheLock) {
 
   app.on("before-quit", () => {
     logger.info("应用准备退出");
-    if (cursorTimer) clearInterval(cursorTimer);
+    stopCursorPolling();
     stopMouseClickMonitor();
     unregisterGlobalShortcuts();
     saveSettingsNow();
