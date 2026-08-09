@@ -1,6 +1,6 @@
 {
   "name": "gif-mouse-follower",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "GIF 鼠标跟随工具：支持 GitHub Pages 网页版，也支持 macOS 全局桌面悬浮版。",
   "main": "desktop/main.js",
   "author": "gif-mouse-follower",

@@ -25,7 +25,10 @@
     offsetX: 28,
     offsetY: 28,
     opacity: 100,
-    removeBackgroundMode: "smart"
+    removeBackgroundMode: "smart",
+    flipH: false,
+    flipV: false,
+    playbackSpeed: 1.0
   };
 
   const pointer = {
@@ -40,6 +43,24 @@
   let currentFrameIndex = 0;
   let lastFrameTime = 0;
   let decodeToken = 0;
+
+  // 背景移除缓存：避免每帧重复计算 flood fill
+  let bgRemovalCache = new Map();
+  let bgCacheKey = "";
+
+  function computeBgCacheKey() {
+    const mode = settings.removeBackgroundMode || "smart";
+    const tol = settings.colorTolerance || 30;
+    const picked = settings.pickedColor
+      ? `${settings.pickedColor.r},${settings.pickedColor.g},${settings.pickedColor.b},${settings.pickedColor.xRatio},${settings.pickedColor.yRatio}`
+      : "none";
+    return `${mode}:${tol}:${picked}:${canvas.width}x${canvas.height}`;
+  }
+
+  function invalidateBgCache() {
+    bgRemovalCache.clear();
+    bgCacheKey = computeBgCacheKey();
+  }
 
   function base64ToUint8(base64) {
     const binary = atob(base64);
@@ -521,7 +542,27 @@
     frameCtx.putImageData(frame.imageData, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(frameCanvas, 0, 0, canvas.width, canvas.height);
-    removeWhiteBackground();
+
+    const mode = settings.removeBackgroundMode || "smart";
+    if (mode === "off" || mode === "preserve-white") return;
+
+    // 检查缓存键是否变化（设置变更时自动失效）
+    const newKey = computeBgCacheKey();
+    if (newKey !== bgCacheKey) {
+      bgRemovalCache.clear();
+      bgCacheKey = newKey;
+    }
+
+    // 命中缓存：直接写入已处理的 ImageData，跳过 flood fill
+    const cached = bgRemovalCache.get(currentFrameIndex);
+    if (cached) {
+      ctx.putImageData(cached, 0, 0);
+    } else {
+      removeWhiteBackground();
+      try {
+        bgRemovalCache.set(currentFrameIndex, ctx.getImageData(0, 0, canvas.width, canvas.height));
+      } catch (_) {}
+    }
   }
 
   async function decodeStaticImage(src) {
@@ -547,6 +588,7 @@
 
   async function loadSource(src) {
     const token = ++decodeToken;
+    bgRemovalCache.clear();
     try {
       const base64 = await window.gifFollower.readImageBase64(src);
       if (token !== decodeToken) return;
@@ -582,6 +624,12 @@
   function applySettings(next) {
     const prev = settings;
     settings = { ...settings, ...(next || {}) };
+    // 背景处理设置变化时清除缓存
+    if (prev.removeBackgroundMode !== settings.removeBackgroundMode ||
+        prev.colorTolerance !== settings.colorTolerance ||
+        JSON.stringify(prev.pickedColor) !== JSON.stringify(settings.pickedColor)) {
+      bgRemovalCache.clear();
+    }
     applySize();
     if (settings.src && settings.src !== prev.src) loadSource(settings.src);
   }
@@ -592,7 +640,9 @@
     pointer.currentY += (pointer.globalY - pointer.currentY) * ease;
 
     const frame = decoded.frames[currentFrameIndex];
-    if (frame && now - lastFrameTime >= frame.delay) {
+    const speed = settings.playbackSpeed || 1.0;
+    const effectiveDelay = frame.delay / speed;
+    if (frame && now - lastFrameTime >= effectiveDelay) {
       currentFrameIndex = (currentFrameIndex + 1) % decoded.frames.length;
       lastFrameTime = now;
       drawCurrentFrame();
@@ -600,7 +650,9 @@
 
     const localX = pointer.currentX - bounds.x + settings.offsetX;
     const localY = pointer.currentY - bounds.y + settings.offsetY;
-    canvas.style.transform = `translate3d(${localX}px, ${localY}px, 0) translate(-50%, -50%)`;
+    const flipX = settings.flipH ? -1 : 1;
+    const flipY = settings.flipV ? -1 : 1;
+    canvas.style.transform = `translate3d(${localX}px, ${localY}px, 0) translate(-50%, -50%) scale(${flipX}, ${flipY})`;
     canvas.style.opacity = settings.enabled && pointer.inside ? String(settings.opacity / 100) : "0";
     requestAnimationFrame(animate);
   }

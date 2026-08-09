@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld("gifFollower", {
   pickColor: (color) => ipcRenderer.invoke("color:pick", color),
   showControl: () => ipcRenderer.invoke("app:showControl"),
   openExternal: (url) => ipcRenderer.invoke("app:openExternal", url),
+  getAutoStart: () => ipcRenderer.invoke("autostart:get"),
+  setAutoStart: (enable) => ipcRenderer.invoke("autostart:set", enable),
   onSettingsUpdate: (callback) => {
     ipcRenderer.on("settings:update", (_event, settings) => callback(settings));
   },
