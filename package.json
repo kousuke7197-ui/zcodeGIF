@@ -8,11 +8,14 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "dist:mac": "electron-builder --mac dmg zip --arm64 --x64"
+    "dist:mac": "electron-builder --mac dmg zip --arm64 --x64",
+    "lint": "eslint ."
   },
   "devDependencies": {
+    "@eslint/js": "^8.57.1",
     "electron": "^31.7.7",
-    "electron-builder": "^24.13.3"
+    "electron-builder": "^24.13.3",
+    "eslint": "^8.57.1"
   },
   "build": {
     "appId": "com.gifmousefollower.app",

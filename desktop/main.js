@@ -4,6 +4,7 @@ const { app, BrowserWindow, dialog, ipcMain, screen, shell, Tray, Menu, globalSh
 const fs = require("fs");
 const path = require("path");
 const { pathToFileURL, fileURLToPath } = require("url");
+const logger = require("./logger");
 
 const PRESETS = [
   { id: "line-dog", name: "线条小狗", file: "line-dog.gif" },
@@ -123,7 +124,7 @@ function loadLibrary() {
         createdAt: item.createdAt || Date.now()
       }));
   } catch (error) {
-    console.warn("读取本地 GIF 库失败。", error);
+    logger.warn("读取本地 GIF 库失败。", error);
     return [];
   }
 }
@@ -174,7 +175,7 @@ function readImageSourceAsBase64(src) {
   }
 
   if (!isAllowedPath(filePath)) {
-    console.warn("拒绝读取非白名单路径:", filePath);
+    logger.warn("拒绝读取非白名单路径:", filePath);
     return "";
   }
 
@@ -189,7 +190,7 @@ function loadSettings() {
     }
     return normalizeSettings(JSON.parse(fs.readFileSync(file, "utf8")));
   } catch (error) {
-    console.warn("读取设置失败，已使用默认设置。", error);
+    logger.warn("读取设置失败，已使用默认设置。", error);
     return defaultSettings();
   }
 }
@@ -277,7 +278,9 @@ function createOverlayForDisplay(display) {
     try {
       win.setHiddenInMissionControl && win.setHiddenInMissionControl(true);
       win.setWindowButtonVisibility && win.setWindowButtonVisibility(false);
-    } catch (_) {}
+    } catch (_) {
+      // macOS 专属 API 在部分系统版本上可能不存在，忽略错误
+    }
   }
 
   win.loadFile(path.join(__dirname, "overlay.html"));
@@ -416,9 +419,15 @@ function unregisterGlobalShortcuts() {
 }
 
 function registerIpc() {
+  logger.info("注册 IPC 处理器");
+
   ipcMain.handle("settings:get", () => settings);
-  ipcMain.handle("settings:set", (_event, patch) => updateSettings(patch));
+  ipcMain.handle("settings:set", (_event, patch) => {
+    logger.info("设置更新:", patch);
+    return updateSettings(patch);
+  });
   ipcMain.handle("settings:reset", () => {
+    logger.info("设置重置为默认");
     settings = defaultSettings();
     saveSettings();
     broadcastSettings();
@@ -430,6 +439,7 @@ function registerIpc() {
   ipcMain.handle("image:readBase64", (_event, src) => readImageSourceAsBase64(src));
 
   ipcMain.handle("dialog:chooseGif", async () => {
+    logger.info("打开文件选择对话框");
     const visibleOverlays = overlayWindows.filter((win) => !win.isDestroyed() && win.isVisible());
     try {
       visibleOverlays.forEach((win) => win.hide());
@@ -448,10 +458,12 @@ function registerIpc() {
       });
 
       if (result.canceled || !result.filePaths[0]) {
+        logger.info("文件选择已取消");
         return settings;
       }
 
       const source = result.filePaths[0];
+      logger.info("已选择文件:", source);
       const item = copyGifToLibrary(source);
       const library = loadLibrary();
       library.unshift(item);
@@ -493,7 +505,7 @@ function registerIpc() {
       try {
         fs.unlinkSync(item.path);
       } catch (error) {
-        console.warn("删除本地 GIF 失败。", error);
+        logger.warn("删除本地 GIF 失败。", error);
       }
     }
     saveLibrary(nextLibrary);
@@ -575,6 +587,9 @@ if (!gotTheLock) {
   });
 
   app.whenReady().then(() => {
+    logger.init(app.getPath("userData"));
+    logger.info("应用启动");
+
     if (process.platform === "darwin" && app.dock) {
       app.dock.show();
     }
@@ -594,6 +609,7 @@ if (!gotTheLock) {
   });
 
   app.on("before-quit", () => {
+    logger.info("应用准备退出");
     if (cursorTimer) clearInterval(cursorTimer);
     unregisterGlobalShortcuts();
     saveSettingsNow();

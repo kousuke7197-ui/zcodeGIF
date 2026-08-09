@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+  smoke-test:
+    name: Electron startup (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+      # Linux 环境需要 Xvfb 虚拟显示才能启动 Electron
+      - name: Install Xvfb (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+
+      - name: Verify Electron startup
+        timeout-minutes: 1
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            # xvfb-run 启动虚拟显示，10 秒后自动终止；只要 Electron 不崩溃即视为通过
+            timeout 10s xvfb-run --auto-servernum npm run start || code=$?
+          else
+            # macOS 直接启动，10 秒后终止
+            timeout 10s npm run start || code=$?
+          fi
+          # timeout 返回 124 表示超时（即 Electron 一直在运行，符合预期）
+          if [ "${code:-0}" = "124" ]; then
+            echo "Electron started successfully (terminated after 10s timeout)."
+            exit 0
+          fi
+          exit ${code:-0}

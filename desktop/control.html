@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' file: data:; img-src 'self' file: data:; style-src 'self' 'unsafe-inline'; script-src 'self';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' file: data:; img-src 'self' file: data:; style-src 'self'; script-src 'self';">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>GIF Mouse Follower</title>
   <link rel="stylesheet" href="./control.css">
@@ -71,7 +71,7 @@
           </div>
         </div>
 
-        <div class="pick-color-area" id="pickColorArea" style="display:none;">
+        <div class="pick-color-area" id="pickColorArea">
           <p class="tip">点击 GIF 预览图上的背景区域，自动去除该颜色</p>
           <div class="color-preview" id="colorPreview"></div>
           <p class="tip" id="pickColorTip"></p>

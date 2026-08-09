@@ -353,9 +353,9 @@ h1 {
   text-align: center;
 }
 
-/* 手动取色区域 */
+/* 手动取色区域：默认隐藏，由 control.js 根据模式切换显示 */
 .pick-color-area {
-  display: grid;
+  display: none;
   gap: 8px;
   padding: 10px 14px;
 }

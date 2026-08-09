@@ -83,7 +83,7 @@
       readSubBlocks: () => {
         const chunks = [];
         let total = 0;
-        while (true) {
+        for (;;) {
           const size = bytes[pos++];
           if (!size) break;
           chunks.push(bytes.slice(pos, pos + size));
@@ -99,7 +99,7 @@
         return out;
       },
       skipSubBlocks: () => {
-        while (true) {
+        for (;;) {
           const size = bytes[pos++];
           if (!size) break;
           pos += size;
@@ -216,7 +216,7 @@
     const frames = [];
     let gce = { disposal: 0, delay: 80, transparentIndex: null };
 
-    while (true) {
+    for (;;) {
       const sentinel = stream.readByte();
       if (sentinel === 0x3b || sentinel === undefined) break;
 
@@ -561,7 +561,9 @@
       removeWhiteBackground();
       try {
         bgRemovalCache.set(currentFrameIndex, ctx.getImageData(0, 0, canvas.width, canvas.height));
-      } catch (_) {}
+      } catch (_) {
+        // getImageData 在某些跨域场景下可能失败，跳过缓存即可
+      }
     }
   }
 
