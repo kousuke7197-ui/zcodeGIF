@@ -55,6 +55,7 @@
   };
 
   let settings = loadSettings();
+  let currentSrc = "";
 
   function loadSettings() {
     try {
@@ -73,14 +74,18 @@
     }
   }
 
+  let saveSettingsTimer = null;
   function saveSettings() {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-      dom.uploadTip.textContent = "设置已自动保存到本机浏览器。";
-    } catch (error) {
-      console.warn("保存本地设置失败。", error);
-      dom.uploadTip.textContent = "当前设置可使用，但浏览器存储空间不足，可能无法完整保存上传的图片。";
-    }
+    if (saveSettingsTimer) clearTimeout(saveSettingsTimer);
+    saveSettingsTimer = setTimeout(() => {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+        dom.uploadTip.textContent = "设置已自动保存到本机浏览器。";
+      } catch (error) {
+        console.warn("保存本地设置失败。", error);
+        dom.uploadTip.textContent = "当前设置可使用，但浏览器存储空间不足，可能无法完整保存上传的图片。";
+      }
+    }, 200);
   }
 
   function clampNumber(value, min, max, fallback) {
@@ -106,8 +111,12 @@
   function applySettings(shouldSave) {
     normalizeSettings();
 
-    dom.follower.src = settings.src;
-    dom.preview.src = settings.src;
+    if (currentSrc !== settings.src) {
+      dom.follower.src = settings.src;
+      dom.preview.src = settings.src;
+      currentSrc = settings.src;
+    }
+
     dom.currentName.textContent = settings.name;
 
     dom.follower.style.width = `${settings.size}px`;
