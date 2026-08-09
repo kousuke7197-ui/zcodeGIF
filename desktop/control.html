@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' file: data:; img-src 'self' file: data:; style-src 'self' 'unsafe-inline'; script-src 'self';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' file: data:; img-src 'self' file: data:; style-src 'self'; script-src 'self';">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>GIF Mouse Follower</title>
   <link rel="stylesheet" href="./control.css">
@@ -13,6 +13,7 @@
       <p class="eyebrow">macOS 桌面版</p>
       <h1>GIF 鼠标跟随</h1>
       <p>启动后切换到任意软件，GIF 都会继续跟随鼠标。悬浮层置顶显示，并且不会阻挡点击。</p>
+      <p class="hero-shortcut">快捷键 <kbd>⌘</kbd> + <kbd>Shift</kbd> + <kbd>G</kbd> 可快速开关跟随</p>
     </section>
 
     <section class="panel">
@@ -70,7 +71,7 @@
           </div>
         </div>
 
-        <div class="pick-color-area" id="pickColorArea" style="display:none;">
+        <div class="pick-color-area" id="pickColorArea">
           <p class="tip">点击 GIF 预览图上的背景区域，自动去除该颜色</p>
           <div class="color-preview" id="colorPreview"></div>
           <p class="tip" id="pickColorTip"></p>
@@ -120,6 +121,51 @@
           </div>
           <input id="opacityInput" type="range" min="20" max="100" step="1">
         </div>
+      </div>
+
+      <!-- 翻转与速度 -->
+      <div class="card">
+        <div class="field-group">
+          <div class="range-label">
+            <label for="speedInput">播放速度</label>
+            <output id="speedValue">1.0x</output>
+          </div>
+          <input id="speedInput" type="range" min="0.25" max="4" step="0.25">
+        </div>
+
+        <div class="flip-group">
+          <span class="group-title">翻转方向</span>
+          <div class="flip-options">
+            <label class="flip-option">
+              <input type="checkbox" id="flipHInput">
+              <span>水平翻转</span>
+            </label>
+            <label class="flip-option">
+              <input type="checkbox" id="flipVInput">
+              <span>垂直翻转</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- 系统设置 -->
+      <div class="card">
+        <label class="switch-row">
+          <span>
+            <strong>深色模式</strong>
+            <small>控制面板使用暗色主题</small>
+          </span>
+          <input id="darkModeInput" class="switch-input" type="checkbox">
+          <span class="switch-ui" aria-hidden="true"></span>
+        </label>
+        <label class="switch-row">
+          <span>
+            <strong>开机自启</strong>
+            <small>登录时自动启动应用</small>
+          </span>
+          <input id="autoStartInput" class="switch-input" type="checkbox">
+          <span class="switch-ui" aria-hidden="true"></span>
+        </label>
       </div>
 
       <!-- 预设 -->

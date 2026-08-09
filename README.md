@@ -7,6 +7,7 @@
 
 ## 功能
 
+### 基础功能
 - GIF 平滑缓动跟随鼠标移动。
 - GIF 永远显示在页面最上层，并通过 `pointer-events: none` 避免阻挡点击。
 - 鼠标离开页面时自动隐藏，回到页面后恢复。
@@ -14,9 +15,21 @@
 - 支持调整 GIF 大小、X/Y 偏移、透明度。
 - 支持开启或关闭跟随功能。
 - 内置 5 个可爱预设：线条小狗、Hello Kitty、玉桂狗、美乐蒂、库洛米。
-- 所有设置自动保存到 `localStorage`，刷新页面后自动恢复。
+- 所有设置自动保存（网页版存 `localStorage`，桌面版存本地文件），刷新/重启后自动恢复。
 - 控制面板支持折叠和展开，移动端友好。
-- macOS 桌面版支持透明置顶悬浮层、鼠标穿透、多屏幕跟随和本地安装包打包。
+
+### 桌面版增强功能
+- **系统托盘**：关闭窗口后应用在后台运行，托盘菜单可开关跟随/显示面板/开机自启/退出。
+- **全局快捷键**：`⌘ + Shift + G` 随时开关跟随，无需切换回控制面板。
+- **开机自启**：一键设置登录时自动启动。
+- **水平/垂直翻转**：支持 GIF 水平或垂直镜像。
+- **播放速度**：0.25x ~ 4.0x 调速，慢动作或快进皆可。
+- **深色模式**：控制面板暗色主题，护眼舒适。
+- **智能白底处理**：智能抠背景 / 保留白色 / 手动取色三种模式。
+- **非 GIF 支持**：PNG / JPG / WebP 图片也能作为跟随素材。
+- **崩溃恢复**：渲染进程崩溃后自动重建窗口，不影响使用。
+- **多屏幕跟随**：多显示器环境下每个屏幕都有悬浮 GIF。
+- **本地 GIF 库**：选择的 GIF 会复制到应用数据目录，原文件删除也不影响使用。
 
 ## 文件结构
 
@@ -26,9 +39,12 @@ gif-mouse-follower/
 ├── style.css
 ├── app.js
 ├── package.json
+├── .eslintrc.cjs
+├── .eslintignore
 ├── desktop/
 │   ├── main.js
 │   ├── preload.js
+│   ├── logger.js
 │   ├── overlay.html
 │   ├── overlay.css
 │   ├── overlay.js
@@ -43,8 +59,15 @@ gif-mouse-follower/
 │   ├── hello-kitty.gif
 │   ├── cinnamoroll.gif
 │   ├── melody.gif
-│   └── kuromi.gif
+│   ├── kuromi.gif
+│   ├── tray-icon.png
+│   ├── app-icon.png
+│   └── app-icon.icns
+├── .github/workflows/
+│   ├── static.yml
+│   └── ci.yml
 ├── MAC_DESKTOP_GUIDE.md
+├── LICENSE
 └── README.md
 ```
 

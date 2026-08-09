@@ -16,6 +16,41 @@
   --accent: #007aff;
   --accent-strong: #0066d6;
   --danger: #ff3b30;
+  --bg-grad-1: rgba(142, 197, 255, 0.34);
+  --bg-grad-2: rgba(255, 201, 219, 0.35);
+  --bg-grad-3: #fbfcff;
+  --bg-grad-4: #eef3fb;
+  --hover-bg: rgba(255, 255, 255, 0.45);
+  --input-bg: rgba(255, 255, 255, 0.58);
+  --switch-bg: #d5dbe4;
+  --card-bg: rgba(255, 255, 255, 0.58);
+  --preview-img-bg: rgba(245, 247, 251, 0.85);
+}
+
+body[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0d1117;
+  --bg-accent-1: rgba(88, 166, 255, 0.1);
+  --bg-accent-2: rgba(248, 81, 73, 0.06);
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --line: rgba(139, 148, 158, 0.2);
+  --panel: rgba(22, 27, 34, 0.82);
+  --panel-strong: rgba(22, 27, 34, 0.92);
+  --shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+  --soft-shadow: 0 12px 36px rgba(0, 0, 0, 0.3);
+  --accent: #58a6ff;
+  --accent-strong: #79b8ff;
+  --danger: #f85149;
+  --bg-grad-1: rgba(88, 166, 255, 0.08);
+  --bg-grad-2: rgba(248, 81, 73, 0.05);
+  --bg-grad-3: #0d1117;
+  --bg-grad-4: #161b22;
+  --hover-bg: rgba(255, 255, 255, 0.06);
+  --input-bg: rgba(255, 255, 255, 0.05);
+  --switch-bg: #30363d;
+  --card-bg: rgba(255, 255, 255, 0.05);
+  --preview-img-bg: rgba(255, 255, 255, 0.05);
 }
 
 * {
@@ -34,9 +69,9 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", sans-serif;
   color: var(--text);
   background:
-    radial-gradient(circle at 14% 12%, var(--bg-accent-1), transparent 30rem),
-    radial-gradient(circle at 86% 22%, var(--bg-accent-2), transparent 28rem),
-    linear-gradient(135deg, #fbfcff 0%, #eef3fb 100%);
+    radial-gradient(circle at 14% 12%, var(--bg-grad-1), transparent 30rem),
+    radial-gradient(circle at 86% 22%, var(--bg-grad-2), transparent 28rem),
+    linear-gradient(135deg, var(--bg-grad-3) 0%, var(--bg-grad-4) 100%);
 }
 
 button,
@@ -301,7 +336,7 @@ h1 {
   height: 56px;
   object-fit: contain;
   border-radius: 18px;
-  background: rgba(245, 247, 251, 0.85);
+  background: var(--preview-img-bg);
 }
 
 .preview-title,
@@ -354,7 +389,7 @@ h1 {
   width: 52px;
   height: 32px;
   border-radius: 999px;
-  background: #d5dbe4;
+  background: var(--switch-bg);
   box-shadow: inset 0 1px 3px rgba(24, 31, 45, 0.12);
   transition: background 180ms ease;
 }
@@ -455,7 +490,7 @@ input[type="range"] {
   padding: 8px 5px;
   border: 1px solid var(--line);
   color: var(--text);
-  background: rgba(255, 255, 255, 0.58);
+  background: var(--card-bg);
 }
 
 .preset-button img {
@@ -531,4 +566,52 @@ input[type="range"] {
   .primary-button {
     width: 100%;
   }
+}
+
+/* 翻转方向选项 */
+.flip-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.flip-option {
+  position: relative;
+  display: grid;
+  place-items: center;
+  gap: 4px;
+  padding: 10px 6px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--input-bg);
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.flip-option:hover {
+  background: var(--hover-bg);
+  border-color: rgba(0, 122, 255, 0.3);
+}
+
+.flip-option input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.flip-option input:checked + span {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.flip-option:has(input:checked) {
+  border-color: rgba(0, 122, 255, 0.48);
+  background: rgba(0, 122, 255, 0.1);
+}
+
+.flip-option span {
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
 }

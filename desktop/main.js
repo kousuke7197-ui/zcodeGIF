@@ -1,9 +1,10 @@
 "use strict";
 
-const { app, BrowserWindow, dialog, ipcMain, screen, shell } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, screen, shell, Tray, Menu, globalShortcut, nativeImage } = require("electron");
 const fs = require("fs");
 const path = require("path");
 const { pathToFileURL, fileURLToPath } = require("url");
+const logger = require("./logger");
 
 const PRESETS = [
   { id: "line-dog", name: "线条小狗", file: "line-dog.gif" },
@@ -17,6 +18,8 @@ let controlWindow = null;
 let overlayWindows = [];
 let cursorTimer = null;
 let settings = null;
+let tray = null;
+let lastCursorPos = { x: -9999, y: -9999 };
 
 function assetPath(file) {
   return path.join(__dirname, "..", "assets", file);
@@ -57,7 +60,11 @@ function defaultSettings() {
     size: 72,
     offsetX: 28,
     offsetY: 28,
-    opacity: 100
+    opacity: 100,
+    flipH: false,
+    flipV: false,
+    playbackSpeed: 1.0,
+    darkMode: false
   };
 }
 
@@ -84,6 +91,10 @@ function normalizeSettings(input) {
   next.offsetY = clampNumber(next.offsetY, -160, 160, base.offsetY);
   next.opacity = clampNumber(next.opacity, 20, 100, base.opacity);
   next.colorTolerance = clampNumber(next.colorTolerance, 0, 100, base.colorTolerance);
+  next.playbackSpeed = clampNumber(next.playbackSpeed, 0.25, 4.0, base.playbackSpeed);
+  next.flipH = Boolean(next.flipH);
+  next.flipV = Boolean(next.flipV);
+  next.darkMode = Boolean(next.darkMode);
   next.src = typeof next.src === "string" && next.src ? next.src : base.src;
   next.name = typeof next.name === "string" && next.name ? next.name : base.name;
   next.presetId = typeof next.presetId === "string" ? next.presetId : base.presetId;
@@ -113,7 +124,7 @@ function loadLibrary() {
         createdAt: item.createdAt || Date.now()
       }));
   } catch (error) {
-    console.warn("读取本地 GIF 库失败。", error);
+    logger.warn("读取本地 GIF 库失败。", error);
     return [];
   }
 }
@@ -164,7 +175,7 @@ function readImageSourceAsBase64(src) {
   }
 
   if (!isAllowedPath(filePath)) {
-    console.warn("拒绝读取非白名单路径:", filePath);
+    logger.warn("拒绝读取非白名单路径:", filePath);
     return "";
   }
 
@@ -179,7 +190,7 @@ function loadSettings() {
     }
     return normalizeSettings(JSON.parse(fs.readFileSync(file, "utf8")));
   } catch (error) {
-    console.warn("读取设置失败，已使用默认设置。", error);
+    logger.warn("读取设置失败，已使用默认设置。", error);
     return defaultSettings();
   }
 }
@@ -213,6 +224,7 @@ function broadcastSettings() {
   if (controlWindow && !controlWindow.isDestroyed()) {
     controlWindow.webContents.send("settings:update", payload);
   }
+  updateTrayMenu();
 }
 
 function updateSettings(patch) {
@@ -266,7 +278,9 @@ function createOverlayForDisplay(display) {
     try {
       win.setHiddenInMissionControl && win.setHiddenInMissionControl(true);
       win.setWindowButtonVisibility && win.setWindowButtonVisibility(false);
-    } catch (_) {}
+    } catch (_) {
+      // macOS 专属 API 在部分系统版本上可能不存在，忽略错误
+    }
   }
 
   win.loadFile(path.join(__dirname, "overlay.html"));
@@ -275,6 +289,18 @@ function createOverlayForDisplay(display) {
     win.showInactive();
     win.webContents.send("overlay:init", { displayId: display.id, bounds: display.bounds });
     win.webContents.send("settings:update", settings);
+  });
+
+  // 崩溃恢复：渲染进程崩溃后自动重建 overlay
+  win.webContents.on("render-process-gone", (_event, details) => {
+    logger.warn(`Overlay 渲染进程崩溃: ${details.reason}`);
+    const idx = overlayWindows.indexOf(win);
+    if (idx >= 0) {
+      if (!win.isDestroyed()) win.destroy();
+      const newWin = createOverlayForDisplay(display);
+      overlayWindows[idx] = newWin;
+      logger.info("Overlay 已自动重建");
+    }
   });
 
   return win;
@@ -294,13 +320,18 @@ function createControlWindow() {
     return;
   }
 
+  if (process.platform === "darwin" && app.dock) {
+    app.dock.show();
+  }
+
   controlWindow = new BrowserWindow({
     width: 480,
     height: 800,
     minWidth: 440,
     minHeight: 640,
     title: "GIF Mouse Follower",
-    backgroundColor: "#f6f8fc",
+    icon: assetPath("app-icon.png"),
+    backgroundColor: settings && settings.darkMode ? "#0d1117" : "#f6f8fc",
     show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -315,6 +346,15 @@ function createControlWindow() {
   controlWindow.on("closed", () => {
     controlWindow = null;
   });
+
+  controlWindow.webContents.on("render-process-gone", (_event, details) => {
+    logger.warn(`Control 渲染进程崩溃: ${details.reason}`);
+    if (controlWindow && !controlWindow.isDestroyed()) {
+      controlWindow.destroy();
+    }
+    createControlWindow();
+    logger.info("Control 已自动重建");
+  });
 }
 
 function startCursorPolling() {
@@ -322,6 +362,9 @@ function startCursorPolling() {
 
   cursorTimer = setInterval(() => {
     const point = screen.getCursorScreenPoint();
+    // 只在鼠标位置变化时发送 IPC，减少不必要的渲染进程开销
+    if (point.x === lastCursorPos.x && point.y === lastCursorPos.y) return;
+    lastCursorPos = point;
     overlayWindows.forEach((win) => {
       if (!win.isDestroyed()) {
         win.webContents.send("cursor:update", point);
@@ -330,10 +373,83 @@ function startCursorPolling() {
   }, 16);
 }
 
+function createTray() {
+  const iconPath = assetPath("tray-icon.png");
+  let icon;
+  try {
+    icon = nativeImage.createFromPath(iconPath);
+    icon.setTemplateImage(true);
+  } catch (_) {
+    icon = nativeImage.createEmpty();
+  }
+
+  tray = new Tray(icon);
+  tray.setToolTip("GIF Mouse Follower");
+  updateTrayMenu();
+
+  tray.on("click", () => {
+    createControlWindow();
+  });
+}
+
+function updateTrayMenu() {
+  if (!tray) return;
+  const enabled = settings ? settings.enabled : true;
+  const autoStart = app.getLoginItemSettings().openAtLogin;
+
+  const menu = Menu.buildFromTemplate([
+    { label: enabled ? "关闭跟随" : "开启跟随", click: () => toggleEnabled() },
+    { label: "显示控制面板", click: () => createControlWindow() },
+    { type: "separator" },
+    {
+      label: "开机自启",
+      type: "checkbox",
+      checked: autoStart,
+      click: () => toggleAutoStart()
+    },
+    { type: "separator" },
+    { label: "退出", click: () => app.quit() }
+  ]);
+  tray.setContextMenu(menu);
+}
+
+function toggleEnabled() {
+  settings = updateSettings({ enabled: !settings.enabled });
+  updateTrayMenu();
+}
+
+function getAutoStart() {
+  return app.getLoginItemSettings().openAtLogin;
+}
+
+function toggleAutoStart() {
+  const current = getAutoStart();
+  app.setLoginItemSettings({ openAtLogin: !current });
+  updateTrayMenu();
+  return !current;
+}
+
+function registerGlobalShortcuts() {
+  // Cmd+Shift+G (macOS) / Ctrl+Shift+G (Windows/Linux) 切换跟随开关
+  globalShortcut.register("CommandOrControl+Shift+G", () => {
+    toggleEnabled();
+  });
+}
+
+function unregisterGlobalShortcuts() {
+  globalShortcut.unregisterAll();
+}
+
 function registerIpc() {
+  logger.info("注册 IPC 处理器");
+
   ipcMain.handle("settings:get", () => settings);
-  ipcMain.handle("settings:set", (_event, patch) => updateSettings(patch));
+  ipcMain.handle("settings:set", (_event, patch) => {
+    logger.info("设置更新:", patch);
+    return updateSettings(patch);
+  });
   ipcMain.handle("settings:reset", () => {
+    logger.info("设置重置为默认");
     settings = defaultSettings();
     saveSettings();
     broadcastSettings();
@@ -345,6 +461,7 @@ function registerIpc() {
   ipcMain.handle("image:readBase64", (_event, src) => readImageSourceAsBase64(src));
 
   ipcMain.handle("dialog:chooseGif", async () => {
+    logger.info("打开文件选择对话框");
     const visibleOverlays = overlayWindows.filter((win) => !win.isDestroyed() && win.isVisible());
     try {
       visibleOverlays.forEach((win) => win.hide());
@@ -363,10 +480,12 @@ function registerIpc() {
       });
 
       if (result.canceled || !result.filePaths[0]) {
+        logger.info("文件选择已取消");
         return settings;
       }
 
       const source = result.filePaths[0];
+      logger.info("已选择文件:", source);
       const item = copyGifToLibrary(source);
       const library = loadLibrary();
       library.unshift(item);
@@ -408,7 +527,7 @@ function registerIpc() {
       try {
         fs.unlinkSync(item.path);
       } catch (error) {
-        console.warn("删除本地 GIF 失败。", error);
+        logger.warn("删除本地 GIF 失败。", error);
       }
     }
     saveLibrary(nextLibrary);
@@ -462,6 +581,13 @@ function registerIpc() {
       }
     });
   });
+
+  ipcMain.handle("autostart:get", () => app.getLoginItemSettings().openAtLogin);
+  ipcMain.handle("autostart:set", (_event, enable) => {
+    app.setLoginItemSettings({ openAtLogin: Boolean(enable) });
+    updateTrayMenu();
+    return Boolean(enable);
+  });
 }
 
 const gotTheLock = app.requestSingleInstanceLock();
@@ -470,6 +596,9 @@ if (!gotTheLock) {
   app.quit();
 } else {
   app.on("second-instance", () => {
+    if (process.platform === "darwin" && app.dock) {
+      app.dock.show();
+    }
     if (controlWindow) {
       if (controlWindow.isMinimized()) controlWindow.restore();
       controlWindow.show();
@@ -480,6 +609,9 @@ if (!gotTheLock) {
   });
 
   app.whenReady().then(() => {
+    logger.init(app.getPath("userData"));
+    logger.info("应用启动");
+
     if (process.platform === "darwin" && app.dock) {
       app.dock.show();
     }
@@ -487,6 +619,8 @@ if (!gotTheLock) {
     registerIpc();
     recreateOverlays();
     createControlWindow();
+    createTray();
+    registerGlobalShortcuts();
     startCursorPolling();
 
     screen.on("display-added", recreateOverlays);
@@ -497,11 +631,27 @@ if (!gotTheLock) {
   });
 
   app.on("before-quit", () => {
+    logger.info("应用准备退出");
     if (cursorTimer) clearInterval(cursorTimer);
+    unregisterGlobalShortcuts();
     saveSettingsNow();
+  });
+
+  app.on("gpu-process-crashed", (event) => {
+    logger.error("GPU 进程崩溃:", event);
+  });
+
+  app.on("child-process-gone", (event, details) => {
+    if (details.type !== "GPU") {
+      logger.warn(`子进程退出: ${details.type}, 原因: ${details.reason}`);
+    }
   });
 
   app.on("window-all-closed", (event) => {
     event.preventDefault();
+    // 关闭所有窗口后隐藏 Dock 图标，但应用仍在托盘运行
+    if (process.platform === "darwin" && app.dock) {
+      app.dock.hide();
+    }
   });
 }

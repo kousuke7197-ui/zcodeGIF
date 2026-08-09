@@ -9,6 +9,33 @@
   --accent: #007aff;
   --danger: #ff3b30;
   --shadow: 0 22px 70px rgba(57, 73, 103, 0.14);
+  --bg-grad-1: rgba(142, 197, 255, 0.38);
+  --bg-grad-2: rgba(255, 201, 219, 0.38);
+  --bg-grad-3: #fbfcff;
+  --bg-grad-4: #eef3fb;
+  --hover-bg: rgba(255, 255, 255, 0.45);
+  --input-bg: rgba(255, 255, 255, 0.5);
+  --switch-bg: #d5dbe4;
+}
+
+body[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0d1117;
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --line: rgba(139, 148, 158, 0.2);
+  --panel: rgba(22, 27, 34, 0.85);
+  --card: rgba(22, 27, 34, 0.6);
+  --accent: #58a6ff;
+  --danger: #f85149;
+  --shadow: 0 22px 70px rgba(0, 0, 0, 0.5);
+  --bg-grad-1: rgba(88, 166, 255, 0.12);
+  --bg-grad-2: rgba(248, 81, 73, 0.08);
+  --bg-grad-3: #0d1117;
+  --bg-grad-4: #161b22;
+  --hover-bg: rgba(255, 255, 255, 0.06);
+  --input-bg: rgba(255, 255, 255, 0.05);
+  --switch-bg: #30363d;
 }
 
 * {
@@ -21,9 +48,9 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", sans-serif;
   color: var(--text);
   background:
-    radial-gradient(circle at 18% 5%, rgba(142, 197, 255, 0.38), transparent 260px),
-    radial-gradient(circle at 90% 12%, rgba(255, 201, 219, 0.38), transparent 240px),
-    linear-gradient(135deg, #fbfcff, #eef3fb);
+    radial-gradient(circle at 18% 5%, var(--bg-grad-1), transparent 260px),
+    radial-gradient(circle at 90% 12%, var(--bg-grad-2), transparent 240px),
+    linear-gradient(135deg, var(--bg-grad-3), var(--bg-grad-4));
 }
 
 button,
@@ -80,6 +107,23 @@ h1 {
   line-height: 1.7;
 }
 
+.hero-shortcut {
+  margin-top: 10px !important;
+  font-size: 13px;
+}
+
+.hero-shortcut kbd {
+  display: inline-block;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--input-bg);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
 .panel {
   display: grid;
   gap: 14px;
@@ -103,7 +147,7 @@ h1 {
   height: 58px;
   object-fit: contain;
   border-radius: 18px;
-  background: rgba(247, 249, 253, 0.9);
+  background: var(--input-bg);
 }
 
 .preview-info {
@@ -186,7 +230,7 @@ h1 {
 }
 
 .switch-row:hover {
-  background: rgba(255, 255, 255, 0.45);
+  background: var(--hover-bg);
 }
 
 .switch-row strong {
@@ -215,7 +259,7 @@ h1 {
   width: 52px;
   height: 32px;
   border-radius: 999px;
-  background: #d5dbe4;
+  background: var(--switch-bg);
   box-shadow: inset 0 1px 3px rgba(24, 31, 45, 0.12);
   transition: background 180ms ease;
 }
@@ -275,13 +319,13 @@ h1 {
   padding: 10px 6px;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.5);
+  background: var(--input-bg);
   cursor: pointer;
   transition: background 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
 }
 
 .mode-option:hover {
-  background: rgba(255, 255, 255, 0.7);
+  background: var(--hover-bg);
   border-color: rgba(0, 122, 255, 0.3);
 }
 
@@ -309,9 +353,9 @@ h1 {
   text-align: center;
 }
 
-/* 手动取色区域 */
+/* 手动取色区域：默认隐藏，由 control.js 根据模式切换显示 */
 .pick-color-area {
-  display: grid;
+  display: none;
   gap: 8px;
   padding: 10px 14px;
 }
@@ -412,7 +456,7 @@ input[type="range"]:focus-visible {
   border: 1px solid var(--line);
   border-radius: 16px;
   color: var(--text);
-  background: rgba(255, 255, 255, 0.58);
+  background: var(--input-bg);
   transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease, border-color 160ms ease;
 }
 
@@ -465,7 +509,7 @@ input[type="range"]:focus-visible {
   border: 1px solid var(--line);
   border-radius: 14px;
   color: var(--text);
-  background: rgba(255, 255, 255, 0.58);
+  background: var(--input-bg);
   transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease, border-color 160ms ease;
 }
 
@@ -575,4 +619,58 @@ input[type="range"]:focus-visible {
 .reset-button:hover {
   transform: translateY(-1px);
   background: rgba(255, 59, 48, 0.12);
+}
+
+/* 翻转方向 */
+.flip-group {
+  padding: 10px 14px;
+}
+
+.flip-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.flip-option {
+  position: relative;
+  display: grid;
+  place-items: center;
+  gap: 4px;
+  padding: 10px 6px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--input-bg);
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.flip-option:hover {
+  background: var(--hover-bg);
+  border-color: rgba(0, 122, 255, 0.3);
+}
+
+.flip-option input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.flip-option input:checked + span {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.flip-option:has(input:checked) {
+  border-color: rgba(0, 122, 255, 0.48);
+  background: rgba(0, 122, 255, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(0, 122, 255, 0.08);
+}
+
+.flip-option span {
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
 }

@@ -20,6 +20,9 @@
     offsetX: 28,
     offsetY: 28,
     opacity: 100,
+    flipH: false,
+    flipV: false,
+    darkMode: false,
     panelCollapsed: false
   };
 
@@ -38,6 +41,9 @@
     offsetYValue: document.getElementById("offsetYValue"),
     opacity: document.getElementById("opacityInput"),
     opacityValue: document.getElementById("opacityValue"),
+    flipH: document.getElementById("flipHInput"),
+    flipV: document.getElementById("flipVInput"),
+    darkMode: document.getElementById("darkModeInput"),
     presetGrid: document.getElementById("presetGrid"),
     reset: document.getElementById("resetButton"),
     panel: document.getElementById("controlPanel"),
@@ -102,6 +108,9 @@
     settings.offsetY = clampNumber(settings.offsetY, -120, 120, DEFAULT_SETTINGS.offsetY);
     settings.opacity = clampNumber(settings.opacity, 20, 100, DEFAULT_SETTINGS.opacity);
     settings.enabled = Boolean(settings.enabled);
+    settings.flipH = Boolean(settings.flipH);
+    settings.flipV = Boolean(settings.flipV);
+    settings.darkMode = Boolean(settings.darkMode);
     settings.panelCollapsed = Boolean(settings.panelCollapsed);
     settings.src = settings.src || DEFAULT_SETTINGS.src;
     settings.name = settings.name || DEFAULT_SETTINGS.name;
@@ -127,6 +136,11 @@
     dom.offsetX.value = String(settings.offsetX);
     dom.offsetY.value = String(settings.offsetY);
     dom.opacity.value = String(settings.opacity);
+    dom.flipH.checked = settings.flipH;
+    dom.flipV.checked = settings.flipV;
+    dom.darkMode.checked = settings.darkMode;
+
+    document.body.setAttribute("data-theme", settings.darkMode ? "dark" : "light");
 
     dom.sizeValue.value = `${settings.size}px`;
     dom.offsetXValue.value = `${settings.offsetX}px`;
@@ -208,8 +222,10 @@
 
     const x = pointer.currentX + settings.offsetX;
     const y = pointer.currentY + settings.offsetY;
+    const flipX = settings.flipH ? -1 : 1;
+    const flipY = settings.flipV ? -1 : 1;
 
-    dom.follower.style.transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -50%)`;
+    dom.follower.style.transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -50%) scale(${flipX}, ${flipY})`;
     requestAnimationFrame(animateFollower);
   }
 
@@ -294,6 +310,22 @@
 
     dom.opacity.addEventListener("input", () => {
       settings.opacity = Number(dom.opacity.value);
+      applySettings(true);
+    });
+
+    dom.flipH.addEventListener("change", () => {
+      settings.flipH = dom.flipH.checked;
+      applySettings(true);
+    });
+
+    dom.flipV.addEventListener("change", () => {
+      settings.flipV = dom.flipV.checked;
+      applySettings(true);
+    });
+
+    dom.darkMode.addEventListener("change", () => {
+      settings.darkMode = dom.darkMode.checked;
+      document.body.setAttribute("data-theme", settings.darkMode ? "dark" : "light");
       applySettings(true);
     });
 

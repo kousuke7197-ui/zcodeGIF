@@ -25,6 +25,12 @@
     offsetYValue: document.getElementById("offsetYValue"),
     opacity: document.getElementById("opacityInput"),
     opacityValue: document.getElementById("opacityValue"),
+    speed: document.getElementById("speedInput"),
+    speedValue: document.getElementById("speedValue"),
+    flipH: document.getElementById("flipHInput"),
+    flipV: document.getElementById("flipVInput"),
+    darkMode: document.getElementById("darkModeInput"),
+    autoStart: document.getElementById("autoStartInput"),
     presetGrid: document.getElementById("presetGrid"),
     libraryGrid: document.getElementById("libraryGrid"),
     reset: document.getElementById("resetButton")
@@ -71,12 +77,20 @@
     dom.offsetY.value = settings.offsetY;
     dom.opacity.value = settings.opacity;
     dom.tolerance.value = settings.colorTolerance || 30;
+    dom.speed.value = settings.playbackSpeed || 1.0;
+    dom.flipH.checked = Boolean(settings.flipH);
+    dom.flipV.checked = Boolean(settings.flipV);
+    dom.darkMode.checked = Boolean(settings.darkMode);
 
     dom.sizeValue.value = `${settings.size}px`;
     dom.offsetXValue.value = `${settings.offsetX}px`;
     dom.offsetYValue.value = `${settings.offsetY}px`;
     dom.opacityValue.value = `${settings.opacity}%`;
     dom.toleranceValue.value = settings.colorTolerance || 30;
+    dom.speedValue.value = `${(settings.playbackSpeed || 1.0).toFixed(2)}x`;
+
+    // 应用深色主题
+    document.body.setAttribute("data-theme", settings.darkMode ? "dark" : "light");
 
     updatePresetButtons();
     updateLibraryButtons();
@@ -311,7 +325,7 @@
           dom.pickColorTip.textContent = `已去除连通区域，点击 GIF 其他区域可继续取色`;
         }
       } catch (err) {
-        console.error(err);
+        console.warn("取色失败:", err);
         dom.pickColorTip.textContent = "取色失败，请重试";
       }
     });
@@ -328,7 +342,7 @@
           ? "已加入本地 GIF 库，原文件删除后也能继续使用。"
           : "已取消选择，没有新增 GIF。";
       } catch (error) {
-        console.error(error);
+        console.warn("打开文件选择器失败:", error);
         dom.fileTip.textContent = "打开文件选择器失败，请重启程序后再试。";
       } finally {
         dom.chooseGif.disabled = false;
@@ -361,6 +375,35 @@
       debouncedSetSettings({ colorTolerance: Number(dom.tolerance.value) });
     });
 
+    dom.speed.addEventListener("input", () => {
+      const speed = Number(dom.speed.value);
+      dom.speedValue.value = `${speed.toFixed(2)}x`;
+      debouncedSetSettings({ playbackSpeed: speed });
+    });
+
+    dom.flipH.addEventListener("change", () => {
+      debouncedSetSettings({ flipH: dom.flipH.checked });
+    });
+
+    dom.flipV.addEventListener("change", () => {
+      debouncedSetSettings({ flipV: dom.flipV.checked });
+    });
+
+    dom.darkMode.addEventListener("change", () => {
+      const dark = dom.darkMode.checked;
+      document.body.setAttribute("data-theme", dark ? "dark" : "light");
+      debouncedSetSettings({ darkMode: dark });
+    });
+
+    dom.autoStart.addEventListener("change", async () => {
+      try {
+        await window.gifFollower.setAutoStart(dom.autoStart.checked);
+      } catch (error) {
+        console.warn("设置开机自启失败:", error);
+        dom.autoStart.checked = !dom.autoStart.checked;
+      }
+    });
+
     dom.reset.addEventListener("click", async () => {
       dom.fileTip.textContent = "已恢复默认设置。";
       applySettings(await window.gifFollower.resetSettings());
@@ -371,19 +414,21 @@
 
   window.addEventListener("DOMContentLoaded", async () => {
     try {
-      const [loadedPresets, loadedLibrary, loadedSettings] = await Promise.all([
+      const [loadedPresets, loadedLibrary, loadedSettings, autoStart] = await Promise.all([
         window.gifFollower.getPresets(),
         window.gifFollower.getLibrary(),
-        window.gifFollower.getSettings()
+        window.gifFollower.getSettings(),
+        window.gifFollower.getAutoStart()
       ]);
       presets = loadedPresets;
       library = loadedLibrary;
       renderPresets();
       applySettings(loadedSettings);
+      dom.autoStart.checked = autoStart;
       renderLibrary();
       bindEvents();
     } catch (error) {
-      console.error(error);
+      console.warn("控制面板初始化失败:", error);
       dom.fileTip.textContent = "控制面板初始化失败，请重启程序。";
     }
   });
