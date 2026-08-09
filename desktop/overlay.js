@@ -17,6 +17,28 @@
   const frameCanvas = document.createElement("canvas");
   const frameCtx = frameCanvas.getContext("2d", { willReadFrequently: true });
 
+  // 粒子特效层：独立 canvas，覆盖整个 overlay 窗口，不影响 GIF 渲染
+  const particleCanvas = document.createElement("canvas");
+  particleCanvas.id = "particleCanvas";
+  particleCanvas.style.position = "fixed";
+  particleCanvas.style.left = "0";
+  particleCanvas.style.top = "0";
+  particleCanvas.style.pointerEvents = "none";
+  particleCanvas.style.zIndex = "2147483647";
+  document.body.appendChild(particleCanvas);
+  const particleCtx = particleCanvas.getContext("2d");
+
+  const particles = [];
+  const PARTICLE_LIFETIME = 500; // 粒子生命周期（毫秒）
+  let lastParticleTime = 0;
+
+  function resizeParticleCanvas() {
+    particleCanvas.width = window.innerWidth;
+    particleCanvas.height = window.innerHeight;
+  }
+  resizeParticleCanvas();
+  window.addEventListener("resize", resizeParticleCanvas);
+
   let bounds = { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight };
   let settings = {
     enabled: true,
@@ -28,7 +50,12 @@
     removeBackgroundMode: "smart",
     flipH: false,
     flipV: false,
-    playbackSpeed: 1.0
+    playbackSpeed: 1.0,
+    rotation: 0,
+    smoothness: 0.18,
+    clickEffect: false,
+    frameStart: 0,
+    frameEnd: 0
   };
 
   const pointer = {
@@ -596,9 +623,15 @@
       } else {
         decoded = await decodeStaticImage(src);
       }
-      currentFrameIndex = 0;
+      currentFrameIndex = settings.frameStart > 0
+        ? Math.min(settings.frameStart, decoded.frames.length - 1)
+        : 0;
       lastFrameTime = performance.now();
       drawCurrentFrame();
+      // 报告帧信息给主进程
+      if (typeof window.gifFollower.reportFrameInfo === "function") {
+        window.gifFollower.reportFrameInfo({ count: decoded.frames.length });
+      }
     } catch (error) {
       console.warn("图片解码失败：", error);
       decoded = { width: 1, height: 1, frames: [] };
@@ -629,18 +662,238 @@
     }
     applySize();
     if (settings.src && settings.src !== prev.src) loadSource(settings.src);
+    if (Array.isArray(settings.companions)) syncCompanions(settings.companions);
+    // 帧范围变化时重置到起始帧
+    if (prev.frameStart !== settings.frameStart || prev.frameEnd !== settings.frameEnd) {
+      const startIdx = settings.frameStart > 0 ? Math.min(settings.frameStart, decoded.frames.length - 1) : 0;
+      currentFrameIndex = startIdx;
+      lastFrameTime = performance.now();
+      drawCurrentFrame();
+    }
+  }
+
+  // ===== 伴生 GIF 渲染器 =====
+  const companionRenderers = [];
+
+  async function loadCompanionSource(renderer) {
+    const token = ++renderer.decodeToken;
+    try {
+      const base64 = await window.gifFollower.readImageBase64(renderer.config.src);
+      if (token !== renderer.decodeToken) return;
+      const bytes = base64ToUint8(base64);
+      const isGif = bytes.length >= 3 && bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46;
+      if (isGif) {
+        renderer.decoded = decodeGif(bytes);
+      } else {
+        renderer.decoded = await decodeStaticImage(renderer.config.src);
+      }
+      renderer.currentFrameIndex = 0;
+      renderer.lastFrameTime = performance.now();
+      drawCompanionFrame(renderer);
+    } catch (error) {
+      console.warn("伴生 GIF 解码失败：", error);
+      renderer.decoded = { width: 1, height: 1, frames: [] };
+    }
+  }
+
+  function drawCompanionFrame(renderer) {
+    if (!renderer.decoded.frames.length) return;
+    const frame = renderer.decoded.frames[renderer.currentFrameIndex];
+    renderer.frameCanvas.width = renderer.decoded.width;
+    renderer.frameCanvas.height = renderer.decoded.height;
+    renderer.frameCtx.putImageData(frame.imageData, 0, 0);
+    renderer.ctx.clearRect(0, 0, renderer.canvas.width, renderer.canvas.height);
+    renderer.ctx.drawImage(renderer.frameCanvas, 0, 0, renderer.canvas.width, renderer.canvas.height);
+  }
+
+  function applyCompanionSize(renderer) {
+    const s = renderer.config.size;
+    renderer.canvas.width = Math.max(1, Math.round(s));
+    renderer.canvas.height = Math.max(1, Math.round(s));
+    renderer.canvas.style.width = `${s}px`;
+    renderer.canvas.style.height = `${s}px`;
+    drawCompanionFrame(renderer);
+  }
+
+  function createCompanionRenderer(config) {
+    const canvas = document.createElement("canvas");
+    canvas.style.position = "fixed";
+    canvas.style.left = "0";
+    canvas.style.top = "0";
+    canvas.style.pointerEvents = "none";
+    canvas.style.willChange = "transform, opacity";
+    canvas.style.opacity = "0";
+    canvas.style.zIndex = "2147483646";
+    document.body.appendChild(canvas);
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    const frameCanvas = document.createElement("canvas");
+    const frameCtx = frameCanvas.getContext("2d", { willReadFrequently: true });
+
+    const renderer = {
+      id: config.id,
+      canvas,
+      ctx,
+      frameCanvas,
+      frameCtx,
+      decoded: { width: 1, height: 1, frames: [] },
+      currentFrameIndex: 0,
+      lastFrameTime: 0,
+      decodeToken: 0,
+      config: { ...config }
+    };
+    applyCompanionSize(renderer);
+    loadCompanionSource(renderer);
+    return renderer;
+  }
+
+  function destroyCompanionRenderer(renderer) {
+    if (renderer.canvas && renderer.canvas.parentNode) {
+      renderer.canvas.parentNode.removeChild(renderer.canvas);
+    }
+  }
+
+  function syncCompanions(companions) {
+    const newIds = companions.map((c) => c.id);
+
+    // 移除不再存在的伴生
+    for (let i = companionRenderers.length - 1; i >= 0; i--) {
+      if (!newIds.includes(companionRenderers[i].id)) {
+        destroyCompanionRenderer(companionRenderers[i]);
+        companionRenderers.splice(i, 1);
+      }
+    }
+
+    // 添加新的伴生 / 更新现有伴生配置
+    companions.forEach((config) => {
+      const existing = companionRenderers.find((r) => r.id === config.id);
+      if (existing) {
+        const srcChanged = existing.config.src !== config.src;
+        existing.config = { ...config };
+        if (existing.config.size !== existing.canvas.width) {
+          applyCompanionSize(existing);
+        }
+        if (srcChanged) {
+          loadCompanionSource(existing);
+        }
+      } else {
+        companionRenderers.push(createCompanionRenderer(config));
+      }
+    });
+  }
+
+  function updateCompanions(now) {
+    const localX = pointer.currentX - bounds.x;
+    const localY = pointer.currentY - bounds.y;
+    const visible = settings.enabled && pointer.inside;
+
+    companionRenderers.forEach((renderer) => {
+      const cfg = renderer.config;
+      const frame = renderer.decoded.frames[renderer.currentFrameIndex];
+      if (frame && now - renderer.lastFrameTime >= frame.delay) {
+        renderer.currentFrameIndex = (renderer.currentFrameIndex + 1) % renderer.decoded.frames.length;
+        renderer.lastFrameTime = now;
+        drawCompanionFrame(renderer);
+      }
+
+      const cx = localX + cfg.offsetX;
+      const cy = localY + cfg.offsetY;
+      const flipX = cfg.flipH ? -1 : 1;
+      const flipY = cfg.flipV ? -1 : 1;
+      renderer.canvas.style.transform = `translate3d(${cx}px, ${cy}px, 0) translate(-50%, -50%) scale(${flipX}, ${flipY}) rotate(${cfg.rotation || 0}deg)`;
+      renderer.canvas.style.opacity = visible ? String(cfg.opacity / 100) : "0";
+    });
+  }
+
+  /**
+   * 绘制五角星粒子
+   */
+  function drawStar(context, x, y, spikes, outerRadius, innerRadius, rotation, alpha) {
+    context.save();
+    context.globalAlpha = Math.max(0, alpha);
+    context.translate(x, y);
+    context.rotate(rotation);
+    context.beginPath();
+    for (let i = 0; i < spikes * 2; i += 1) {
+      const r = i % 2 === 0 ? outerRadius : innerRadius;
+      const angle = (Math.PI * i) / spikes - Math.PI / 2;
+      const px = Math.cos(angle) * r;
+      const py = Math.sin(angle) * r;
+      if (i === 0) context.moveTo(px, py);
+      else context.lineTo(px, py);
+    }
+    context.closePath();
+    context.fillStyle = "#ffd54a";
+    context.shadowColor = "rgba(255, 213, 74, 0.9)";
+    context.shadowBlur = 8;
+    context.fill();
+    context.restore();
+  }
+
+  /**
+   * 在指定位置（overlay 本地坐标）生成 6-8 个星星粒子，向外扩散
+   */
+  function spawnParticles(x, y) {
+    const count = 6 + Math.floor(Math.random() * 3); // 6-8 个
+    for (let i = 0; i < count; i += 1) {
+      const angle = (Math.PI * 2 * i) / count + Math.random() * 0.6;
+      const speed = 1.5 + Math.random() * 2.5;
+      const baseSize = 4 + Math.random() * 4;
+      particles.push({
+        x: x,
+        y: y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        baseSize: baseSize,
+        size: baseSize,
+        rotation: Math.random() * Math.PI * 2,
+        rotationSpeed: (Math.random() - 0.5) * 0.3,
+        life: PARTICLE_LIFETIME,
+        maxLife: PARTICLE_LIFETIME
+      });
+    }
+  }
+
+  /**
+   * 更新所有粒子的位置、透明度、大小并绘制；生命结束时移除
+   */
+  function updateParticles(dt) {
+    particleCtx.clearRect(0, 0, particleCanvas.width, particleCanvas.height);
+    if (!particles.length) return;
+    const step = dt / 16; // 以 16ms 为标准帧步长归一化
+    for (let i = particles.length - 1; i >= 0; i -= 1) {
+      const p = particles[i];
+      p.life -= dt;
+      if (p.life <= 0) {
+        particles.splice(i, 1);
+        continue;
+      }
+      p.x += p.vx * step;
+      p.y += p.vy * step;
+      // 阻尼，让粒子逐渐减速
+      p.vx *= 0.96;
+      p.vy *= 0.96;
+      p.rotation += p.rotationSpeed * step;
+      const t = p.life / p.maxLife; // 1 -> 0
+      p.size = p.baseSize * t;
+      drawStar(particleCtx, p.x, p.y, 5, p.size, p.size * 0.5, p.rotation, t);
+    }
   }
 
   function animate(now) {
-    const ease = 0.18;
+    const ease = settings.smoothness || 0.18;
     pointer.currentX += (pointer.globalX - pointer.currentX) * ease;
     pointer.currentY += (pointer.globalY - pointer.currentY) * ease;
 
     const frame = decoded.frames[currentFrameIndex];
     const speed = settings.playbackSpeed || 1.0;
     const effectiveDelay = frame.delay / speed;
+    // 帧范围截取
+    const startIdx = settings.frameStart > 0 ? Math.min(settings.frameStart, decoded.frames.length - 1) : 0;
+    const endIdx = settings.frameEnd > 0 ? Math.min(settings.frameEnd, decoded.frames.length - 1) : decoded.frames.length - 1;
+    const range = Math.max(1, endIdx - startIdx + 1);
     if (frame && now - lastFrameTime >= effectiveDelay) {
-      currentFrameIndex = (currentFrameIndex + 1) % decoded.frames.length;
+      const offset = ((currentFrameIndex - startIdx + 1) % range + range) % range;
+      currentFrameIndex = startIdx + offset;
       lastFrameTime = now;
       drawCurrentFrame();
     }
@@ -649,13 +902,26 @@
     const localY = pointer.currentY - bounds.y + settings.offsetY;
     const flipX = settings.flipH ? -1 : 1;
     const flipY = settings.flipV ? -1 : 1;
-    canvas.style.transform = `translate3d(${localX}px, ${localY}px, 0) translate(-50%, -50%) scale(${flipX}, ${flipY})`;
+    const rotation = settings.rotation || 0;
+    canvas.style.transform = `translate3d(${localX}px, ${localY}px, 0) translate(-50%, -50%) scale(${flipX}, ${flipY}) rotate(${rotation}deg)`;
     canvas.style.opacity = settings.enabled && pointer.inside ? String(settings.opacity / 100) : "0";
+
+    // 粒子特效更新（clickEffect 关闭且无残留粒子时跳过，避免无谓绘制）
+    const particleDt = lastParticleTime ? Math.min(64, now - lastParticleTime) : 16;
+    lastParticleTime = now;
+    if (settings.clickEffect || particles.length) {
+      updateParticles(particleDt);
+    }
+
+    // 更新伴生 GIF
+    updateCompanions(now);
+
     requestAnimationFrame(animate);
   }
 
   window.gifFollower.onOverlayInit((payload) => {
     bounds = payload.bounds || bounds;
+    resizeParticleCanvas();
   });
 
   window.gifFollower.onSettingsUpdate(applySettings);
@@ -665,6 +931,17 @@
     pointer.globalY = point.y;
     pointer.inside = isInside(point);
   });
+
+  // 鼠标点击粒子特效：主进程检测到鼠标按键状态变化后发送 mouse:click 事件。
+  // preload 暂未暴露 onMouseClick 时不做任何处理，避免阻塞其它逻辑。
+  if (typeof window.gifFollower.onMouseClick === "function") {
+    window.gifFollower.onMouseClick((point) => {
+      if (!settings.clickEffect) return;
+      const gx = point && typeof point.x === "number" ? point.x : pointer.globalX;
+      const gy = point && typeof point.y === "number" ? point.y : pointer.globalY;
+      spawnParticles(gx - bounds.x, gy - bounds.y);
+    });
+  }
 
   window.addEventListener("DOMContentLoaded", async () => {
     applySettings(await window.gifFollower.getSettings());

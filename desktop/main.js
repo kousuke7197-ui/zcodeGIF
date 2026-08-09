@@ -4,6 +4,7 @@ const { app, BrowserWindow, dialog, ipcMain, screen, shell, Tray, Menu, globalSh
 const fs = require("fs");
 const path = require("path");
 const { pathToFileURL, fileURLToPath } = require("url");
+const { execFile } = require("child_process");
 const logger = require("./logger");
 
 const PRESETS = [
@@ -20,6 +21,8 @@ let cursorTimer = null;
 let settings = null;
 let tray = null;
 let lastCursorPos = { x: -9999, y: -9999 };
+let mouseMonitorProcess = null;
+let frameInfo = { count: 0 };
 
 function assetPath(file) {
   return path.join(__dirname, "..", "assets", file);
@@ -64,7 +67,14 @@ function defaultSettings() {
     flipH: false,
     flipV: false,
     playbackSpeed: 1.0,
-    darkMode: false
+    darkMode: false,
+    rotation: 0,
+    smoothness: 0.18,
+    clickEffect: false,
+    customShortcut: "CommandOrControl+Shift+G",
+    companions: [],
+    frameStart: 0,
+    frameEnd: 0
   };
 }
 
@@ -104,6 +114,34 @@ function normalizeSettings(input) {
     ? next.removeBackgroundMode
     : base.removeBackgroundMode;
   next.pickedColor = next.pickedColor || null;
+
+  const validRotations = [0, 90, 180, 270];
+  next.rotation = validRotations.includes(Number(next.rotation)) ? Number(next.rotation) : base.rotation;
+  next.smoothness = clampNumber(next.smoothness, 0.05, 0.50, base.smoothness);
+  next.clickEffect = Boolean(next.clickEffect);
+  next.customShortcut = typeof next.customShortcut === "string" && next.customShortcut
+    ? next.customShortcut
+    : base.customShortcut;
+
+  // 伴生 GIF 数组规范化
+  if (!Array.isArray(next.companions)) next.companions = [];
+  next.companions = next.companions
+    .filter((c) => c && typeof c.src === "string" && c.src)
+    .map((c) => ({
+      id: typeof c.id === "string" ? c.id : `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+      src: c.src,
+      name: typeof c.name === "string" ? c.name : "伴生 GIF",
+      size: clampNumber(c.size, 20, 200, 48),
+      offsetX: clampNumber(c.offsetX, -200, 200, -40),
+      offsetY: clampNumber(c.offsetY, -200, 200, 20),
+      rotation: [0, 90, 180, 270].includes(Number(c.rotation)) ? Number(c.rotation) : 0,
+      flipH: Boolean(c.flipH),
+      flipV: Boolean(c.flipV),
+      opacity: clampNumber(c.opacity, 20, 100, 80)
+    }));
+
+  next.frameStart = Math.max(0, Math.floor(Number(next.frameStart) || 0));
+  next.frameEnd = Math.max(0, Math.floor(Number(next.frameEnd) || 0));
 
   return next;
 }
@@ -373,6 +411,64 @@ function startCursorPolling() {
   }, 16);
 }
 
+function startMouseClickMonitor() {
+  if (process.platform !== "darwin") return;
+  if (mouseMonitorProcess) return;
+
+  const swiftPath = path.join(__dirname, "mouse-click-monitor.swift");
+
+  try {
+    mouseMonitorProcess = execFile("swift", [swiftPath], {
+      maxBuffer: 1024 * 1024
+    });
+
+    mouseMonitorProcess.stdout.on("data", (data) => {
+      const lines = data.toString().trim().split("\n");
+      for (const line of lines) {
+        const parts = line.trim().split(",");
+        if (parts.length !== 2) continue;
+        const x = parseInt(parts[0], 10);
+        const y = parseInt(parts[1], 10);
+        if (Number.isNaN(x) || Number.isNaN(y)) continue;
+        const point = { x, y };
+        overlayWindows.forEach((win) => {
+          if (!win.isDestroyed()) {
+            win.webContents.send("mouse:click", point);
+          }
+        });
+      }
+    });
+
+    mouseMonitorProcess.on("error", (error) => {
+      logger.warn("鼠标点击监听启动失败（需要 swift 命令行工具）:", error.message);
+      mouseMonitorProcess = null;
+    });
+
+    mouseMonitorProcess.on("exit", (code) => {
+      if (code !== 0) {
+        logger.info("鼠标点击监听未启动（可能缺少辅助功能权限），粒子特效将不可用");
+      }
+      mouseMonitorProcess = null;
+    });
+
+    logger.info("鼠标点击监听已启动");
+  } catch (error) {
+    logger.warn("鼠标点击监听初始化失败:", error.message);
+    mouseMonitorProcess = null;
+  }
+}
+
+function stopMouseClickMonitor() {
+  if (mouseMonitorProcess) {
+    try {
+      mouseMonitorProcess.kill();
+    } catch (_) {
+      // 忽略
+    }
+    mouseMonitorProcess = null;
+  }
+}
+
 function createTray() {
   const iconPath = assetPath("tray-icon.png");
   let icon;
@@ -430,10 +526,21 @@ function toggleAutoStart() {
 }
 
 function registerGlobalShortcuts() {
-  // Cmd+Shift+G (macOS) / Ctrl+Shift+G (Windows/Linux) 切换跟随开关
-  globalShortcut.register("CommandOrControl+Shift+G", () => {
+  // 先注销已注册的快捷键，再注册新的，避免重复绑定
+  unregisterGlobalShortcuts();
+
+  const accelerator = (settings && settings.customShortcut) || "CommandOrControl+Shift+G";
+  logger.info("注册全局快捷键:", accelerator);
+
+  const registered = globalShortcut.register(accelerator, () => {
     toggleEnabled();
   });
+
+  if (!registered) {
+    logger.warn("全局快捷键注册失败:", accelerator);
+  }
+
+  return registered;
 }
 
 function unregisterGlobalShortcuts() {
@@ -588,6 +695,154 @@ function registerIpc() {
     updateTrayMenu();
     return Boolean(enable);
   });
+
+  ipcMain.handle("settings:export", async () => {
+    logger.info("导出设置");
+    try {
+      const result = await dialog.showSaveDialog({
+        title: "导出设置",
+        defaultPath: "settings.json",
+        filters: [{ name: "JSON 文件", extensions: ["json"] }]
+      });
+
+      if (result.canceled || !result.filePath) {
+        logger.info("导出设置已取消");
+        return { success: false, canceled: true };
+      }
+
+      const payload = normalizeSettings(settings);
+      fs.writeFileSync(result.filePath, JSON.stringify(payload, null, 2), "utf8");
+      logger.info("设置已导出至:", result.filePath);
+      return { success: true, path: result.filePath };
+    } catch (error) {
+      logger.error("导出设置失败。", error);
+      return { success: false, error: String(error) };
+    }
+  });
+
+  ipcMain.handle("settings:import", async () => {
+    logger.info("导入设置");
+    try {
+      const result = await dialog.showOpenDialog({
+        title: "导入设置",
+        properties: ["openFile"],
+        filters: [{ name: "JSON 文件", extensions: ["json"] }]
+      });
+
+      if (result.canceled || !result.filePaths[0]) {
+        logger.info("导入设置已取消");
+        return { success: false, canceled: true };
+      }
+
+      const fileContent = fs.readFileSync(result.filePaths[0], "utf8");
+      const imported = JSON.parse(fileContent);
+      settings = normalizeSettings(imported);
+      saveSettingsNow();
+      broadcastSettings();
+      // 重新注册快捷键以应用导入的 customShortcut
+      registerGlobalShortcuts();
+      logger.info("设置已从:", result.filePaths[0], "导入");
+      return { success: true, settings };
+    } catch (error) {
+      logger.error("导入设置失败。", error);
+      return { success: false, error: String(error) };
+    }
+  });
+
+  ipcMain.handle("library:addFile", (_event, filePath) => {
+    if (typeof filePath !== "string" || !filePath) {
+      logger.warn("library:addFile 收到非法文件路径");
+      return { success: false, error: "非法文件路径" };
+    }
+
+    if (!fs.existsSync(filePath)) {
+      logger.warn("library:addFile 文件不存在:", filePath);
+      return { success: false, error: "文件不存在" };
+    }
+
+    try {
+      const item = copyGifToLibrary(filePath);
+      const library = loadLibrary();
+      library.unshift(item);
+      saveLibrary(library);
+      logger.info("已添加文件到 GIF 库:", filePath);
+      return { success: true, item, library };
+    } catch (error) {
+      logger.error("添加文件到 GIF 库失败。", error);
+      return { success: false, error: String(error) };
+    }
+  });
+
+  ipcMain.handle("shortcut:set", (_event, accelerator) => {
+    if (typeof accelerator !== "string" || !accelerator.trim()) {
+      logger.warn("shortcut:set 收到非法快捷键");
+      return { success: false, error: "非法快捷键" };
+    }
+
+    const trimmed = accelerator.trim();
+    logger.info("更新全局快捷键:", trimmed);
+
+    // 更新设置中的快捷键并持久化
+    settings = updateSettings({ customShortcut: trimmed });
+
+    // 先注销再注册新的快捷键
+    const registered = registerGlobalShortcuts();
+    if (!registered) {
+      logger.warn("快捷键注册失败:", trimmed);
+      return { success: false, error: "快捷键注册失败", accelerator: trimmed };
+    }
+
+    return { success: true, accelerator: trimmed };
+  });
+
+  // 伴生 GIF 管理
+  ipcMain.handle("companion:add", (_event, { src, name }) => {
+    if (typeof src !== "string" || !src) {
+      return { success: false, error: "缺少 GIF 来源" };
+    }
+    const companions = Array.isArray(settings.companions) ? settings.companions : [];
+    if (companions.length >= 5) {
+      return { success: false, error: "最多支持 5 个伴生 GIF" };
+    }
+    const newCompanion = {
+      id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+      src,
+      name: name || "伴生 GIF",
+      size: 48,
+      offsetX: -40,
+      offsetY: 20,
+      rotation: 0,
+      flipH: false,
+      flipV: false,
+      opacity: 80
+    };
+    const updated = updateSettings({ companions: [...companions, newCompanion] });
+    return { success: true, settings: updated };
+  });
+
+  ipcMain.handle("companion:remove", (_event, id) => {
+    const companions = Array.isArray(settings.companions) ? settings.companions : [];
+    const updated = updateSettings({ companions: companions.filter((c) => c.id !== id) });
+    return { success: true, settings: updated };
+  });
+
+  ipcMain.handle("companion:update", (_event, { id, patch }) => {
+    const companions = Array.isArray(settings.companions) ? settings.companions : [];
+    const updated = updateSettings({
+      companions: companions.map((c) => c.id === id ? { ...c, ...patch } : c)
+    });
+    return { success: true, settings: updated };
+  });
+
+  // 帧信息：overlay 解码 GIF 后报告帧数
+  ipcMain.on("frame:info", (_event, info) => {
+    frameInfo = info || { count: 0 };
+    if (controlWindow && !controlWindow.isDestroyed()) {
+      controlWindow.webContents.send("frame:info", frameInfo);
+    }
+  });
+
+  ipcMain.handle("frame:getInfo", () => frameInfo);
 }
 
 const gotTheLock = app.requestSingleInstanceLock();
@@ -622,6 +877,7 @@ if (!gotTheLock) {
     createTray();
     registerGlobalShortcuts();
     startCursorPolling();
+    startMouseClickMonitor();
 
     screen.on("display-added", recreateOverlays);
     screen.on("display-removed", recreateOverlays);
@@ -633,6 +889,7 @@ if (!gotTheLock) {
   app.on("before-quit", () => {
     logger.info("应用准备退出");
     if (cursorTimer) clearInterval(cursorTimer);
+    stopMouseClickMonitor();
     unregisterGlobalShortcuts();
     saveSettingsNow();
   });

@@ -31,6 +31,26 @@
     flipV: document.getElementById("flipVInput"),
     darkMode: document.getElementById("darkModeInput"),
     autoStart: document.getElementById("autoStartInput"),
+    rotationOptions: document.getElementById("rotationOptions"),
+    rotationValue: document.getElementById("rotationValue"),
+    smoothness: document.getElementById("smoothnessInput"),
+    smoothnessValue: document.getElementById("smoothnessValue"),
+    clickEffect: document.getElementById("clickEffectInput"),
+    shortcutInput: document.getElementById("shortcutInput"),
+    shortcutRecordBtn: document.getElementById("shortcutRecordBtn"),
+    shortcutTip: document.getElementById("shortcutTip"),
+    exportBtn: document.getElementById("exportSettingsBtn"),
+    importBtn: document.getElementById("importSettingsBtn"),
+    companionSelect: document.getElementById("companionSelect"),
+    addCompanionBtn: document.getElementById("addCompanionBtn"),
+    companionList: document.getElementById("companionList"),
+    companionTip: document.getElementById("companionTip"),
+    frameCountValue: document.getElementById("frameCountValue"),
+    frameStart: document.getElementById("frameStartInput"),
+    frameStartValue: document.getElementById("frameStartValue"),
+    frameEnd: document.getElementById("frameEndInput"),
+    frameEndValue: document.getElementById("frameEndValue"),
+    resetFrameBtn: document.getElementById("resetFrameBtn"),
     presetGrid: document.getElementById("presetGrid"),
     libraryGrid: document.getElementById("libraryGrid"),
     reset: document.getElementById("resetButton")
@@ -81,6 +101,7 @@
     dom.flipH.checked = Boolean(settings.flipH);
     dom.flipV.checked = Boolean(settings.flipV);
     dom.darkMode.checked = Boolean(settings.darkMode);
+    dom.clickEffect.checked = Boolean(settings.clickEffect);
 
     dom.sizeValue.value = `${settings.size}px`;
     dom.offsetXValue.value = `${settings.offsetX}px`;
@@ -88,12 +109,31 @@
     dom.opacityValue.value = `${settings.opacity}%`;
     dom.toleranceValue.value = settings.colorTolerance || 30;
     dom.speedValue.value = `${(settings.playbackSpeed || 1.0).toFixed(2)}x`;
+    dom.smoothness.value = settings.smoothness || 0.18;
+    dom.smoothnessValue.value = (settings.smoothness || 0.18).toFixed(2);
+    dom.rotationValue.value = `${settings.rotation || 0}°`;
+
+    // 帧截取显示
+    dom.frameStart.value = settings.frameStart || 0;
+    dom.frameStartValue.value = settings.frameStart || 0;
+    dom.frameEnd.value = settings.frameEnd || 0;
+    dom.frameEndValue.value = settings.frameEnd || 0;
+
+    // 更新旋转按钮高亮
+    dom.rotationOptions.querySelectorAll(".rotation-btn").forEach((btn) => {
+      btn.classList.toggle("is-active", Number(btn.dataset.rotation) === (settings.rotation || 0));
+    });
+
+    // 更新快捷键显示
+    const shortcut = settings.customShortcut || "CommandOrControl+Shift+G";
+    dom.shortcutInput.value = formatShortcut(shortcut);
 
     // 应用深色主题
     document.body.setAttribute("data-theme", settings.darkMode ? "dark" : "light");
 
     updatePresetButtons();
     updateLibraryButtons();
+    renderCompanionList();
   }
 
   function updatePresetButtons() {
@@ -111,6 +151,198 @@
       const active = button.dataset.libraryId === settings.libraryId;
       button.classList.toggle("is-active", active);
       button.setAttribute("aria-pressed", String(active));
+    });
+  }
+
+  function populateCompanionSelect() {
+    dom.companionSelect.innerHTML = '<option value="">选择 GIF…</option>';
+    const group1 = document.createElement("optgroup");
+    group1.label = "预设";
+    presets.forEach((p) => {
+      const opt = document.createElement("option");
+      opt.value = p.src;
+      opt.textContent = p.name;
+      group1.append(opt);
+    });
+    dom.companionSelect.append(group1);
+
+    if (library.length) {
+      const group2 = document.createElement("optgroup");
+      group2.label = "本地库";
+      library.forEach((item) => {
+        const opt = document.createElement("option");
+        opt.value = item.src;
+        opt.textContent = item.name;
+        group2.append(opt);
+      });
+      dom.companionSelect.append(group2);
+    }
+  }
+
+  function renderCompanionList() {
+    dom.companionList.innerHTML = "";
+    const companions = (settings && settings.companions) || [];
+    if (!companions.length) {
+      const empty = document.createElement("p");
+      empty.className = "tip";
+      empty.textContent = "还没有添加伴生 GIF。";
+      dom.companionList.append(empty);
+      return;
+    }
+
+    companions.forEach((comp) => {
+      const item = document.createElement("div");
+      item.className = "companion-item";
+
+      // 头部：缩略图 + 名称 + 删除
+      const header = document.createElement("div");
+      header.className = "companion-header";
+      const img = document.createElement("img");
+      img.src = comp.src;
+      img.alt = "";
+      const name = document.createElement("span");
+      name.textContent = comp.name || "伴生 GIF";
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "companion-remove";
+      removeBtn.textContent = "×";
+      removeBtn.setAttribute("aria-label", `删除${comp.name}`);
+      removeBtn.addEventListener("click", async () => {
+        const result = await window.gifFollower.removeCompanion(comp.id);
+        if (result.success) applySettings(result.settings);
+      });
+      header.append(img, name, removeBtn);
+
+      // 控制区域
+      const controls = document.createElement("div");
+      controls.className = "companion-controls";
+
+      // 大小
+      const sizeGroup = document.createElement("div");
+      sizeGroup.className = "field-group";
+      sizeGroup.style.padding = "0";
+      const sizeLabel = document.createElement("div");
+      sizeLabel.className = "range-label";
+      const sizeLbl = document.createElement("label");
+      sizeLbl.textContent = "大小";
+      sizeLbl.style.fontSize = "11px";
+      const sizeOut = document.createElement("output");
+      sizeOut.textContent = `${comp.size}px`;
+      sizeLabel.append(sizeLbl, sizeOut);
+      const sizeInput = document.createElement("input");
+      sizeInput.type = "range";
+      sizeInput.min = "20";
+      sizeInput.max = "200";
+      sizeInput.step = "1";
+      sizeInput.value = comp.size;
+      sizeInput.addEventListener("input", () => {
+        sizeOut.textContent = `${sizeInput.value}px`;
+      });
+      sizeInput.addEventListener("change", () => {
+        window.gifFollower.updateCompanion(comp.id, { size: Number(sizeInput.value) });
+      });
+      sizeGroup.append(sizeLabel, sizeInput);
+
+      // 偏移 X/Y
+      const offsetGrid = document.createElement("div");
+      offsetGrid.className = "companion-mini-grid";
+
+      const offXGroup = document.createElement("div");
+      offXGroup.style.padding = "0";
+      const offXLabel = document.createElement("div");
+      offXLabel.className = "range-label";
+      const offXLbl = document.createElement("label");
+      offXLbl.textContent = "X 偏移";
+      offXLbl.style.fontSize = "11px";
+      const offXOut = document.createElement("output");
+      offXOut.textContent = `${comp.offsetX}px`;
+      offXLabel.append(offXLbl, offXOut);
+      const offXInput = document.createElement("input");
+      offXInput.type = "range";
+      offXInput.min = "-200";
+      offXInput.max = "200";
+      offXInput.step = "1";
+      offXInput.value = comp.offsetX;
+      offXInput.addEventListener("input", () => {
+        offXOut.textContent = `${offXInput.value}px`;
+      });
+      offXInput.addEventListener("change", () => {
+        window.gifFollower.updateCompanion(comp.id, { offsetX: Number(offXInput.value) });
+      });
+      offXGroup.append(offXLabel, offXInput);
+
+      const offYGroup = document.createElement("div");
+      offYGroup.style.padding = "0";
+      const offYLabel = document.createElement("div");
+      offYLabel.className = "range-label";
+      const offYLbl = document.createElement("label");
+      offYLbl.textContent = "Y 偏移";
+      offYLbl.style.fontSize = "11px";
+      const offYOut = document.createElement("output");
+      offYOut.textContent = `${comp.offsetY}px`;
+      offYLabel.append(offYLbl, offYOut);
+      const offYInput = document.createElement("input");
+      offYInput.type = "range";
+      offYInput.min = "-200";
+      offYInput.max = "200";
+      offYInput.step = "1";
+      offYInput.value = comp.offsetY;
+      offYInput.addEventListener("input", () => {
+        offYOut.textContent = `${offYInput.value}px`;
+      });
+      offYInput.addEventListener("change", () => {
+        window.gifFollower.updateCompanion(comp.id, { offsetY: Number(offYInput.value) });
+      });
+      offYGroup.append(offYLabel, offYInput);
+
+      offsetGrid.append(offXGroup, offYGroup);
+
+      // 旋转
+      const rotRow = document.createElement("div");
+      rotRow.className = "companion-rotation-row";
+      [0, 90, 180, 270].forEach((deg) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "companion-rotation-btn";
+        btn.textContent = `${deg}°`;
+        if (comp.rotation === deg) btn.classList.add("is-active");
+        btn.addEventListener("click", () => {
+          rotRow.querySelectorAll(".companion-rotation-btn").forEach((b) => b.classList.remove("is-active"));
+          btn.classList.add("is-active");
+          window.gifFollower.updateCompanion(comp.id, { rotation: deg });
+        });
+        rotRow.append(btn);
+      });
+
+      // 透明度
+      const opGroup = document.createElement("div");
+      opGroup.className = "field-group";
+      opGroup.style.padding = "0";
+      const opLabel = document.createElement("div");
+      opLabel.className = "range-label";
+      const opLbl = document.createElement("label");
+      opLbl.textContent = "透明度";
+      opLbl.style.fontSize = "11px";
+      const opOut = document.createElement("output");
+      opOut.textContent = `${comp.opacity}%`;
+      opLabel.append(opLbl, opOut);
+      const opInput = document.createElement("input");
+      opInput.type = "range";
+      opInput.min = "20";
+      opInput.max = "100";
+      opInput.step = "1";
+      opInput.value = comp.opacity;
+      opInput.addEventListener("input", () => {
+        opOut.textContent = `${opInput.value}%`;
+      });
+      opInput.addEventListener("change", () => {
+        window.gifFollower.updateCompanion(comp.id, { opacity: Number(opInput.value) });
+      });
+      opGroup.append(opLabel, opInput);
+
+      controls.append(sizeGroup, offsetGrid, rotRow, opGroup);
+      item.append(header, controls);
+      dom.companionList.append(item);
     });
   }
 
@@ -269,6 +501,19 @@
     return base.length > 8 ? base.slice(0, 7) + "…" : base;
   }
 
+  function formatShortcut(accelerator) {
+    if (!accelerator) return "⌘ + Shift + G";
+    return accelerator
+      .replace(/CommandOrControl/gi, "⌘")
+      .replace(/Command/gi, "⌘")
+      .replace(/Control/gi, "Ctrl")
+      .replace(/Shift/gi, "Shift")
+      .replace(/Alt/gi, "⌥")
+      .replace(/\+/g, " + ");
+  }
+
+  let isRecordingShortcut = false;
+
   async function getPixelColor(src, x, y) {
     return new Promise((resolve, reject) => {
       const img = new Image();
@@ -290,6 +535,7 @@
   async function refreshLibrary() {
     library = await window.gifFollower.getLibrary();
     renderLibrary();
+    populateCompanionSelect();
   }
 
   function bindEvents() {
@@ -409,6 +655,191 @@
       applySettings(await window.gifFollower.resetSettings());
     });
 
+    // 旋转角度按钮
+    dom.rotationOptions.addEventListener("click", (event) => {
+      const btn = event.target.closest(".rotation-btn");
+      if (!btn) return;
+      const rotation = Number(btn.dataset.rotation);
+      debouncedSetSettings({ rotation });
+    });
+
+    // 跟随平滑度
+    dom.smoothness.addEventListener("input", () => {
+      const value = Number(dom.smoothness.value);
+      dom.smoothnessValue.value = value.toFixed(2);
+      debouncedSetSettings({ smoothness: value });
+    });
+
+    // 点击粒子特效开关
+    dom.clickEffect.addEventListener("change", () => {
+      debouncedSetSettings({ clickEffect: dom.clickEffect.checked });
+    });
+
+    // 导出设置
+    dom.exportBtn.addEventListener("click", async () => {
+      try {
+        const result = await window.gifFollower.exportSettings();
+        if (result.success) {
+          dom.fileTip.textContent = `设置已导出到 ${result.path}`;
+        } else if (!result.canceled) {
+          dom.fileTip.textContent = "导出失败，请重试";
+        }
+      } catch (error) {
+        console.warn("导出设置失败:", error);
+        dom.fileTip.textContent = "导出失败，请重试";
+      }
+    });
+
+    // 导入设置
+    dom.importBtn.addEventListener("click", async () => {
+      try {
+        const result = await window.gifFollower.importSettings();
+        if (result.success) {
+          applySettings(result.settings);
+          dom.fileTip.textContent = "设置导入成功，已应用新配置";
+        } else if (!result.canceled) {
+          dom.fileTip.textContent = "导入失败，请检查文件格式";
+        }
+      } catch (error) {
+        console.warn("导入设置失败:", error);
+        dom.fileTip.textContent = "导入失败，请检查文件格式";
+      }
+    });
+
+    // 快捷键录制
+    dom.shortcutRecordBtn.addEventListener("click", async () => {
+      if (isRecordingShortcut) return;
+      isRecordingShortcut = true;
+      dom.shortcutRecordBtn.textContent = "录制中...";
+      dom.shortcutTip.textContent = "请按下新的快捷键组合（按 Esc 取消）";
+
+      const accelerator = await new Promise((resolve) => {
+        function handleKey(e) {
+          if (e.key === "Escape") {
+            window.removeEventListener("keydown", handleKey);
+            resolve(null);
+            return;
+          }
+          // 忽略单独按修饰键
+          if (!e.key || e.key === "Meta" || e.key === "Shift" || e.key === "Alt" || e.key === "Control") return;
+
+          const mods = [];
+          if (e.metaKey) mods.push("CommandOrControl");
+          if (e.shiftKey) mods.push("Shift");
+          if (e.altKey) mods.push("Alt");
+          if (e.ctrlKey && !e.metaKey) mods.push("Control");
+          if (!mods.length) return;
+
+          // 规范化按键名
+          let key = e.key;
+          if (key.length === 1) key = key.toUpperCase();
+          else if (key === " ") key = "Space";
+          else key = key.charAt(0).toUpperCase() + key.slice(1);
+
+          const combo = [...mods, key].join("+");
+          window.removeEventListener("keydown", handleKey);
+          resolve(combo);
+        }
+        window.addEventListener("keydown", handleKey);
+      });
+
+      isRecordingShortcut = false;
+      dom.shortcutRecordBtn.textContent = "重新录制";
+
+      if (accelerator) {
+        try {
+          const result = await window.gifFollower.setShortcut(accelerator);
+          if (result.success) {
+            dom.shortcutInput.value = formatShortcut(accelerator);
+            dom.shortcutTip.textContent = "快捷键已更新，立即生效";
+          } else {
+            dom.shortcutTip.textContent = "快捷键设置失败，可能被其他应用占用";
+          }
+        } catch (error) {
+          console.warn("快捷键设置失败:", error);
+          dom.shortcutTip.textContent = "快捷键设置失败，请选择其他组合";
+        }
+      } else {
+        dom.shortcutTip.textContent = "已取消录制";
+      }
+    });
+
+    // 伴生 GIF 添加
+    dom.addCompanionBtn.addEventListener("click", async () => {
+      const src = dom.companionSelect.value;
+      if (!src) {
+        dom.companionTip.textContent = "请先选择一个 GIF";
+        return;
+      }
+      const selectedOpt = dom.companionSelect.selectedOptions[0];
+      const name = selectedOpt ? selectedOpt.textContent : "伴生 GIF";
+      try {
+        const result = await window.gifFollower.addCompanion(src, name);
+        if (result.success) {
+          applySettings(result.settings);
+          dom.companionTip.textContent = `已添加伴生 GIF：${name}`;
+          dom.companionSelect.value = "";
+        } else {
+          dom.companionTip.textContent = result.error || "添加失败";
+        }
+      } catch (error) {
+        console.warn("添加伴生 GIF 失败:", error);
+        dom.companionTip.textContent = "添加失败，请重试";
+      }
+    });
+
+    // 帧截取
+    dom.frameStart.addEventListener("input", () => {
+      const val = Number(dom.frameStart.value);
+      dom.frameStartValue.value = val;
+      // 确保起始帧不超过结束帧
+      const endVal = Number(dom.frameEnd.value);
+      if (val > endVal && endVal > 0) {
+        dom.frameEnd.value = val;
+        dom.frameEndValue.value = val;
+      }
+    });
+    dom.frameStart.addEventListener("change", () => {
+      debouncedSetSettings({
+        frameStart: Number(dom.frameStart.value),
+        frameEnd: Number(dom.frameEnd.value)
+      });
+    });
+
+    dom.frameEnd.addEventListener("input", () => {
+      const val = Number(dom.frameEnd.value);
+      dom.frameEndValue.value = val;
+      // 确保结束帧不小于起始帧
+      const startVal = Number(dom.frameStart.value);
+      if (val < startVal && val > 0) {
+        dom.frameStart.value = val;
+        dom.frameStartValue.value = val;
+      }
+    });
+    dom.frameEnd.addEventListener("change", () => {
+      debouncedSetSettings({
+        frameStart: Number(dom.frameStart.value),
+        frameEnd: Number(dom.frameEnd.value)
+      });
+    });
+
+    dom.resetFrameBtn.addEventListener("click", () => {
+      dom.frameStart.value = 0;
+      dom.frameStartValue.value = 0;
+      dom.frameEnd.value = 0;
+      dom.frameEndValue.value = 0;
+      debouncedSetSettings({ frameStart: 0, frameEnd: 0 });
+    });
+
+    // 帧信息更新
+    window.gifFollower.onFrameInfo((info) => {
+      const count = (info && info.count) || 0;
+      const maxIdx = count > 0 ? count - 1 : 0;
+      dom.frameCountValue.textContent = count > 0 ? `共 ${count} 帧` : "无法获取帧数";
+      dom.frameStart.max = maxIdx;
+      dom.frameEnd.max = maxIdx;
+    });
+
     window.gifFollower.onSettingsUpdate(applySettings);
   }
 
@@ -426,7 +857,20 @@
       applySettings(loadedSettings);
       dom.autoStart.checked = autoStart;
       renderLibrary();
+      populateCompanionSelect();
       bindEvents();
+      // 获取初始帧信息（overlay 可能已经解码完成）
+      try {
+        const info = await window.gifFollower.getFrameInfo();
+        if (info && info.count > 0) {
+          const maxIdx = info.count - 1;
+          dom.frameCountValue.textContent = `共 ${info.count} 帧`;
+          dom.frameStart.max = maxIdx;
+          dom.frameEnd.max = maxIdx;
+        }
+      } catch (_) {
+        // 帧信息尚未就绪，等待 overlay 报告
+      }
     } catch (error) {
       console.warn("控制面板初始化失败:", error);
       dom.fileTip.textContent = "控制面板初始化失败，请重启程序。";

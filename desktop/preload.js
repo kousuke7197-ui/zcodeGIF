@@ -18,6 +18,18 @@ contextBridge.exposeInMainWorld("gifFollower", {
   openExternal: (url) => ipcRenderer.invoke("app:openExternal", url),
   getAutoStart: () => ipcRenderer.invoke("autostart:get"),
   setAutoStart: (enable) => ipcRenderer.invoke("autostart:set", enable),
+  exportSettings: () => ipcRenderer.invoke("settings:export"),
+  importSettings: () => ipcRenderer.invoke("settings:import"),
+  addFileToLibrary: (filePath) => ipcRenderer.invoke("library:addFile", filePath),
+  setShortcut: (accelerator) => ipcRenderer.invoke("shortcut:set", accelerator),
+  addCompanion: (src, name) => ipcRenderer.invoke("companion:add", { src, name }),
+  removeCompanion: (id) => ipcRenderer.invoke("companion:remove", id),
+  updateCompanion: (id, patch) => ipcRenderer.invoke("companion:update", { id, patch }),
+  reportFrameInfo: (info) => ipcRenderer.send("frame:info", info),
+  getFrameInfo: () => ipcRenderer.invoke("frame:getInfo"),
+  onFrameInfo: (callback) => {
+    ipcRenderer.on("frame:info", (_event, info) => callback(info));
+  },
   onSettingsUpdate: (callback) => {
     ipcRenderer.on("settings:update", (_event, settings) => callback(settings));
   },
@@ -26,5 +38,8 @@ contextBridge.exposeInMainWorld("gifFollower", {
   },
   onOverlayInit: (callback) => {
     ipcRenderer.on("overlay:init", (_event, payload) => callback(payload));
+  },
+  onMouseClick: (callback) => {
+    ipcRenderer.on("mouse:click", (_event, point) => callback(point));
   }
 });
