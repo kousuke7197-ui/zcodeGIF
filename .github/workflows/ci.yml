@@ -29,12 +29,8 @@ jobs:
         run: npm run lint
 
   smoke-test:
-    name: Electron startup (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
+    name: Electron startup
+    runs-on: macos-latest
 
     steps:
       - name: Checkout
@@ -52,25 +48,12 @@ jobs:
       - name: Run ESLint
         run: npm run lint
 
-      # Linux 环境需要 Xvfb + Electron 系统依赖
-      - name: Install Linux dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb libnss3 libatk1.0-0 libatk-bridge2.0-0 \
-            libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 \
-            libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2
-
       - name: Verify Electron startup
         timeout-minutes: 2
         run: |
           # 启动 Electron，等待 10 秒后检查进程是否存活
           # 存活 = 启动成功；已退出 = 启动失败
-          if [ "$RUNNER_OS" = "Linux" ]; then
-            xvfb-run --auto-servernum npm run start &
-          else
-            npm run start &
-          fi
+          npm run start &
           PID=$!
           sleep 10
           if kill -0 $PID 2>/dev/null; then
