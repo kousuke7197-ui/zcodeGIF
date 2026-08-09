@@ -57,11 +57,6 @@
     return `${mode}:${tol}:${picked}:${canvas.width}x${canvas.height}`;
   }
 
-  function invalidateBgCache() {
-    bgRemovalCache.clear();
-    bgCacheKey = computeBgCacheKey();
-  }
-
   function base64ToUint8(base64) {
     const binary = atob(base64);
     const bytes = new Uint8Array(binary.length);

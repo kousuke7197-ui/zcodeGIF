@@ -325,7 +325,7 @@
           dom.pickColorTip.textContent = `已去除连通区域，点击 GIF 其他区域可继续取色`;
         }
       } catch (err) {
-        console.error(err);
+        console.warn("取色失败:", err);
         dom.pickColorTip.textContent = "取色失败，请重试";
       }
     });
@@ -342,7 +342,7 @@
           ? "已加入本地 GIF 库，原文件删除后也能继续使用。"
           : "已取消选择，没有新增 GIF。";
       } catch (error) {
-        console.error(error);
+        console.warn("打开文件选择器失败:", error);
         dom.fileTip.textContent = "打开文件选择器失败，请重启程序后再试。";
       } finally {
         dom.chooseGif.disabled = false;
@@ -399,7 +399,7 @@
       try {
         await window.gifFollower.setAutoStart(dom.autoStart.checked);
       } catch (error) {
-        console.error("设置开机自启失败:", error);
+        console.warn("设置开机自启失败:", error);
         dom.autoStart.checked = !dom.autoStart.checked;
       }
     });
@@ -428,7 +428,7 @@
       renderLibrary();
       bindEvents();
     } catch (error) {
-      console.error(error);
+      console.warn("控制面板初始化失败:", error);
       dom.fileTip.textContent = "控制面板初始化失败，请重启程序。";
     }
   });

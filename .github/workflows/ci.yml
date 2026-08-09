@@ -16,10 +16,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node 20
+      - name: Setup Node 22
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -40,10 +40,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node 20
+      - name: Setup Node 22
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -52,24 +52,35 @@ jobs:
       - name: Run ESLint
         run: npm run lint
 
-      # Linux 环境需要 Xvfb 虚拟显示才能启动 Electron
-      - name: Install Xvfb (Linux)
+      # Linux 环境需要 Xvfb + Electron 系统依赖
+      - name: Install Linux dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y xvfb
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libnss3 libatk1.0-0 libatk-bridge2.0-0 \
+            libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 \
+            libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2
 
       - name: Verify Electron startup
-        timeout-minutes: 1
+        timeout-minutes: 2
         run: |
+          # 启动 Electron，等待 10 秒后检查进程是否存活
+          # 存活 = 启动成功；已退出 = 启动失败
           if [ "$RUNNER_OS" = "Linux" ]; then
-            # xvfb-run 启动虚拟显示，10 秒后自动终止；只要 Electron 不崩溃即视为通过
-            timeout 10s xvfb-run --auto-servernum npm run start || code=$?
+            xvfb-run --auto-servernum npm run start &
           else
-            # macOS 直接启动，10 秒后终止
-            timeout 10s npm run start || code=$?
+            npm run start &
           fi
-          # timeout 返回 124 表示超时（即 Electron 一直在运行，符合预期）
-          if [ "${code:-0}" = "124" ]; then
-            echo "Electron started successfully (terminated after 10s timeout)."
+          PID=$!
+          sleep 10
+          if kill -0 $PID 2>/dev/null; then
+            echo "Electron started successfully (terminated after 10s)."
+            kill $PID 2>/dev/null
+            wait $PID 2>/dev/null
             exit 0
+          else
+            wait $PID 2>/dev/null
+            EXIT_CODE=$?
+            echo "Electron exited early with code $EXIT_CODE."
+            exit 1
           fi
-          exit ${code:-0}
