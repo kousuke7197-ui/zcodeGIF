@@ -34,6 +34,18 @@
   let presets = [];
   let library = [];
 
+  function debounce(fn, delay) {
+    let timer = null;
+    return (...args) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => fn(...args), delay);
+    };
+  }
+
+  const debouncedSetSettings = debounce(async (patch) => {
+    applySettings(await window.gifFollower.setSettings(patch));
+  }, 150);
+
   function applySettings(next) {
     settings = { ...(settings || {}), ...(next || {}) };
 
@@ -324,24 +336,29 @@
       }
     });
 
-    dom.size.addEventListener("input", async () => {
-      applySettings(await window.gifFollower.setSettings({ size: Number(dom.size.value) }));
+    dom.size.addEventListener("input", () => {
+      dom.sizeValue.value = `${dom.size.value}px`;
+      debouncedSetSettings({ size: Number(dom.size.value) });
     });
 
-    dom.offsetX.addEventListener("input", async () => {
-      applySettings(await window.gifFollower.setSettings({ offsetX: Number(dom.offsetX.value) }));
+    dom.offsetX.addEventListener("input", () => {
+      dom.offsetXValue.value = `${dom.offsetX.value}px`;
+      debouncedSetSettings({ offsetX: Number(dom.offsetX.value) });
     });
 
-    dom.offsetY.addEventListener("input", async () => {
-      applySettings(await window.gifFollower.setSettings({ offsetY: Number(dom.offsetY.value) }));
+    dom.offsetY.addEventListener("input", () => {
+      dom.offsetYValue.value = `${dom.offsetY.value}px`;
+      debouncedSetSettings({ offsetY: Number(dom.offsetY.value) });
     });
 
-    dom.opacity.addEventListener("input", async () => {
-      applySettings(await window.gifFollower.setSettings({ opacity: Number(dom.opacity.value) }));
+    dom.opacity.addEventListener("input", () => {
+      dom.opacityValue.value = `${dom.opacity.value}%`;
+      debouncedSetSettings({ opacity: Number(dom.opacity.value) });
     });
 
-    dom.tolerance.addEventListener("input", async () => {
-      applySettings(await window.gifFollower.setSettings({ colorTolerance: Number(dom.tolerance.value) }));
+    dom.tolerance.addEventListener("input", () => {
+      dom.toleranceValue.value = dom.tolerance.value;
+      debouncedSetSettings({ colorTolerance: Number(dom.tolerance.value) });
     });
 
     dom.reset.addEventListener("click", async () => {

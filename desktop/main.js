@@ -139,6 +139,14 @@ function copyGifToLibrary(source) {
   };
 }
 
+function isAllowedPath(filePath) {
+  const resolved = path.resolve(filePath);
+  const assetsDir = path.join(__dirname, "..", "assets");
+  const libraryDir = gifLibraryDir();
+  return resolved.startsWith(assetsDir + path.sep) ||
+         resolved.startsWith(libraryDir + path.sep);
+}
+
 function readImageSourceAsBase64(src) {
   if (typeof src !== "string" || !src) {
     return "";
@@ -153,6 +161,11 @@ function readImageSourceAsBase64(src) {
   let filePath = cleanSrc;
   if (cleanSrc.startsWith("file://")) {
     filePath = fileURLToPath(cleanSrc);
+  }
+
+  if (!isAllowedPath(filePath)) {
+    console.warn("拒绝读取非白名单路径:", filePath);
+    return "";
   }
 
   return fs.readFileSync(filePath).toString("base64");
@@ -171,7 +184,20 @@ function loadSettings() {
   }
 }
 
+let saveSettingsTimer = null;
 function saveSettings() {
+  if (saveSettingsTimer) clearTimeout(saveSettingsTimer);
+  saveSettingsTimer = setTimeout(() => {
+    const file = userDataPath("settings.json");
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(settings, null, 2), "utf8");
+  }, 300);
+}
+function saveSettingsNow() {
+  if (saveSettingsTimer) {
+    clearTimeout(saveSettingsTimer);
+    saveSettingsTimer = null;
+  }
   const file = userDataPath("settings.json");
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(settings, null, 2), "utf8");
@@ -226,7 +252,7 @@ function createOverlayForDisplay(display) {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
       backgroundThrottling: false
     }
   });
@@ -280,7 +306,7 @@ function createControlWindow() {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: true
     }
   });
 
@@ -438,28 +464,44 @@ function registerIpc() {
   });
 }
 
-app.whenReady().then(() => {
-  if (process.platform === "darwin" && app.dock) {
-    app.dock.show();
-  }
+const gotTheLock = app.requestSingleInstanceLock();
 
-  settings = loadSettings();
-  registerIpc();
-  recreateOverlays();
-  createControlWindow();
-  startCursorPolling();
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    if (controlWindow) {
+      if (controlWindow.isMinimized()) controlWindow.restore();
+      controlWindow.show();
+      controlWindow.focus();
+    } else {
+      createControlWindow();
+    }
+  });
 
-  screen.on("display-added", recreateOverlays);
-  screen.on("display-removed", recreateOverlays);
-  screen.on("display-metrics-changed", recreateOverlays);
+  app.whenReady().then(() => {
+    if (process.platform === "darwin" && app.dock) {
+      app.dock.show();
+    }
+    settings = loadSettings();
+    registerIpc();
+    recreateOverlays();
+    createControlWindow();
+    startCursorPolling();
 
-  app.on("activate", createControlWindow);
-});
+    screen.on("display-added", recreateOverlays);
+    screen.on("display-removed", recreateOverlays);
+    screen.on("display-metrics-changed", recreateOverlays);
 
-app.on("before-quit", () => {
-  if (cursorTimer) clearInterval(cursorTimer);
-});
+    app.on("activate", createControlWindow);
+  });
 
-app.on("window-all-closed", (event) => {
-  event.preventDefault();
-});
+  app.on("before-quit", () => {
+    if (cursorTimer) clearInterval(cursorTimer);
+    saveSettingsNow();
+  });
+
+  app.on("window-all-closed", (event) => {
+    event.preventDefault();
+  });
+}

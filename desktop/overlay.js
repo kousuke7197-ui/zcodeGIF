@@ -524,17 +524,44 @@
     removeWhiteBackground();
   }
 
+  async function decodeStaticImage(src) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const cvs = document.createElement("canvas");
+        cvs.width = img.naturalWidth || 1;
+        cvs.height = img.naturalHeight || 1;
+        const c = cvs.getContext("2d");
+        c.drawImage(img, 0, 0);
+        const imageData = c.getImageData(0, 0, cvs.width, cvs.height);
+        resolve({
+          width: cvs.width,
+          height: cvs.height,
+          frames: [{ delay: 999999, imageData }]
+        });
+      };
+      img.onerror = () => reject(new Error("无法加载图片"));
+      img.src = src;
+    });
+  }
+
   async function loadSource(src) {
     const token = ++decodeToken;
     try {
       const base64 = await window.gifFollower.readImageBase64(src);
       if (token !== decodeToken) return;
-      decoded = decodeGif(base64ToUint8(base64));
+      const bytes = base64ToUint8(base64);
+      const isGif = bytes.length >= 3 && bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46;
+      if (isGif) {
+        decoded = decodeGif(bytes);
+      } else {
+        decoded = await decodeStaticImage(src);
+      }
       currentFrameIndex = 0;
       lastFrameTime = performance.now();
       drawCurrentFrame();
     } catch (error) {
-      console.warn("GIF 解码失败：", error);
+      console.warn("图片解码失败：", error);
       decoded = { width: 1, height: 1, frames: [] };
     }
   }
