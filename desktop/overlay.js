@@ -71,9 +71,19 @@
   let lastFrameTime = 0;
   let decodeToken = 0;
 
-  // 背景移除缓存：避免每帧重复计算 flood fill
+  // 背景移除缓存：避免每帧重复计算 flood fill。
+  // 限制容量，防止长 GIF + 大尺寸时缓存无限增长（Map 按插入顺序淘汰最旧条目）
+  const BG_CACHE_MAX_ENTRIES = 60;
   let bgRemovalCache = new Map();
   let bgCacheKey = "";
+
+  function cacheBgFrame(frameIndex, imageData) {
+    if (bgRemovalCache.size >= BG_CACHE_MAX_ENTRIES) {
+      const oldestKey = bgRemovalCache.keys().next().value;
+      bgRemovalCache.delete(oldestKey);
+    }
+    bgRemovalCache.set(frameIndex, imageData);
+  }
 
   function computeBgCacheKey() {
     const mode = settings.removeBackgroundMode || "smart";
@@ -238,6 +248,12 @@
     const frames = [];
     let gce = { disposal: 0, delay: 80, transparentIndex: null };
 
+    // 解码内存上限：每帧按全画布 ImageData 存储（宽×高×4 字节），
+    // 超长 GIF 无上限会撑爆内存，超过阈值即截断并保留已解码部分
+    const MAX_DECODE_BYTES = 200 * 1024 * 1024; // 200MB
+    const bytesPerFrame = width * height * 4;
+    const maxFrames = Math.max(1, Math.floor(MAX_DECODE_BYTES / bytesPerFrame));
+
     for (;;) {
       const sentinel = stream.readByte();
       if (sentinel === 0x3b || sentinel === undefined) break;
@@ -299,6 +315,11 @@
         delay: gce.delay,
         imageData: new ImageData(new Uint8ClampedArray(canvasData), width, height)
       });
+
+      if (frames.length >= maxFrames) {
+        console.warn(`GIF 帧数过多，已按内存上限截断为前 ${maxFrames} 帧`);
+        break;
+      }
 
       if (gce.disposal === 2) {
         for (let y = 0; y < frameHeight; y += 1) {
@@ -582,7 +603,7 @@
     } else {
       removeWhiteBackground();
       try {
-        bgRemovalCache.set(currentFrameIndex, ctx.getImageData(0, 0, canvas.width, canvas.height));
+        cacheBgFrame(currentFrameIndex, ctx.getImageData(0, 0, canvas.width, canvas.height));
       } catch (_) {
         // getImageData 在某些跨域场景下可能失败，跳过缓存即可
       }
@@ -789,7 +810,8 @@
     companionRenderers.forEach((renderer) => {
       const cfg = renderer.config;
       const frame = renderer.decoded.frames[renderer.currentFrameIndex];
-      if (frame && now - renderer.lastFrameTime >= frame.delay) {
+      // 不可见时同样跳过伴生 GIF 的帧推进与绘制
+      if (visible && frame && now - renderer.lastFrameTime >= frame.delay) {
         renderer.currentFrameIndex = (renderer.currentFrameIndex + 1) % renderer.decoded.frames.length;
         renderer.lastFrameTime = now;
         drawCompanionFrame(renderer);
@@ -885,13 +907,23 @@
     pointer.currentY += (pointer.globalY - pointer.currentY) * ease;
 
     const frame = decoded.frames[currentFrameIndex];
+    // 解码完成前（或解码失败）frames 为空：跳过本帧绘制但必须继续调度，
+    // 否则异常/提前 return 会导致 rAF 循环永久终止
+    if (!frame) {
+      canvas.style.opacity = "0";
+      updateCompanions(now);
+      requestAnimationFrame(animate);
+      return;
+    }
     const speed = settings.playbackSpeed || 1.0;
     const effectiveDelay = frame.delay / speed;
     // 帧范围截取
     const startIdx = settings.frameStart > 0 ? Math.min(settings.frameStart, decoded.frames.length - 1) : 0;
     const endIdx = settings.frameEnd > 0 ? Math.min(settings.frameEnd, decoded.frames.length - 1) : decoded.frames.length - 1;
     const range = Math.max(1, endIdx - startIdx + 1);
-    if (frame && now - lastFrameTime >= effectiveDelay) {
+    const followerVisible = settings.enabled && pointer.inside;
+    // 不可见时跳过帧推进与绘制，降低后台开销
+    if (followerVisible && now - lastFrameTime >= effectiveDelay) {
       const offset = ((currentFrameIndex - startIdx + 1) % range + range) % range;
       currentFrameIndex = startIdx + offset;
       lastFrameTime = now;
@@ -904,7 +936,7 @@
     const flipY = settings.flipV ? -1 : 1;
     const rotation = settings.rotation || 0;
     canvas.style.transform = `translate3d(${localX}px, ${localY}px, 0) translate(-50%, -50%) scale(${flipX}, ${flipY}) rotate(${rotation}deg)`;
-    canvas.style.opacity = settings.enabled && pointer.inside ? String(settings.opacity / 100) : "0";
+    canvas.style.opacity = followerVisible ? String(settings.opacity / 100) : "0";
 
     // 粒子特效更新（clickEffect 关闭且无残留粒子时跳过，避免无谓绘制）
     const particleDt = lastParticleTime ? Math.min(64, now - lastParticleTime) : 16;

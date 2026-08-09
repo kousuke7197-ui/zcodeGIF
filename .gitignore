@@ -1,3 +1,5 @@
 node_modules/
 dist/
 .DS_Store
+# 构建产物：点击监听预编译二进制（由 scripts/compile-click-monitor.sh 生成）
+desktop/mouse-click-monitor

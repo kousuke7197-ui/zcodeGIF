@@ -24,7 +24,7 @@ guard let tap = CGEvent.tapCreate(
     eventsOfInterest: CGEventMask(eventMask),
     callback: { _, type, event, _ in
         if type == .leftMouseDown {
-            let location = CGEventGetLocation(event)
+            let location = event.location
             print("\(Int(location.x)),\(Int(location.y))")
             fflush(stdout)
         }

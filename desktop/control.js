@@ -514,8 +514,15 @@
 
   let isRecordingShortcut = false;
 
-  async function getPixelColor(src, x, y) {
+  // 取色用离屏 canvas 缓存：按 src 缓存解码结果，连续取色不再重复加载图片
+  let pickColorCache = { src: "", canvas: null, ctx: null };
+
+  function getPickColorCanvas(src) {
     return new Promise((resolve, reject) => {
+      if (pickColorCache.src === src && pickColorCache.canvas) {
+        resolve(pickColorCache);
+        return;
+      }
       const img = new Image();
       img.crossOrigin = "anonymous";
       img.onload = () => {
@@ -524,12 +531,22 @@
         cvs.height = img.naturalHeight;
         const c = cvs.getContext("2d");
         c.drawImage(img, 0, 0);
-        const px = c.getImageData(Math.max(0, Math.min(x, img.naturalWidth - 1)), Math.max(0, Math.min(y, img.naturalHeight - 1)), 1, 1).data;
-        resolve({ r: px[0], g: px[1], b: px[2] });
+        pickColorCache = { src, canvas: cvs, ctx: c };
+        resolve(pickColorCache);
       };
       img.onerror = reject;
       img.src = src;
     });
+  }
+
+  async function getPixelColor(src, x, y) {
+    const { canvas: cvs, ctx: c } = await getPickColorCanvas(src);
+    const px = c.getImageData(
+      Math.max(0, Math.min(x, cvs.width - 1)),
+      Math.max(0, Math.min(y, cvs.height - 1)),
+      1, 1
+    ).data;
+    return { r: px[0], g: px[1], b: px[2] };
   }
 
   async function refreshLibrary() {
