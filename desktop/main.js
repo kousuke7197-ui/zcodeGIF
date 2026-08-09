@@ -291,6 +291,18 @@ function createOverlayForDisplay(display) {
     win.webContents.send("settings:update", settings);
   });
 
+  // 崩溃恢复：渲染进程崩溃后自动重建 overlay
+  win.webContents.on("render-process-gone", (_event, details) => {
+    logger.warn(`Overlay 渲染进程崩溃: ${details.reason}`);
+    const idx = overlayWindows.indexOf(win);
+    if (idx >= 0) {
+      if (!win.isDestroyed()) win.destroy();
+      const newWin = createOverlayForDisplay(display);
+      overlayWindows[idx] = newWin;
+      logger.info("Overlay 已自动重建");
+    }
+  });
+
   return win;
 }
 
@@ -318,6 +330,7 @@ function createControlWindow() {
     minWidth: 440,
     minHeight: 640,
     title: "GIF Mouse Follower",
+    icon: assetPath("app-icon.png"),
     backgroundColor: settings && settings.darkMode ? "#0d1117" : "#f6f8fc",
     show: false,
     webPreferences: {
@@ -332,6 +345,15 @@ function createControlWindow() {
   controlWindow.once("ready-to-show", () => controlWindow.show());
   controlWindow.on("closed", () => {
     controlWindow = null;
+  });
+
+  controlWindow.webContents.on("render-process-gone", (_event, details) => {
+    logger.warn(`Control 渲染进程崩溃: ${details.reason}`);
+    if (controlWindow && !controlWindow.isDestroyed()) {
+      controlWindow.destroy();
+    }
+    createControlWindow();
+    logger.info("Control 已自动重建");
   });
 }
 
@@ -613,6 +635,16 @@ if (!gotTheLock) {
     if (cursorTimer) clearInterval(cursorTimer);
     unregisterGlobalShortcuts();
     saveSettingsNow();
+  });
+
+  app.on("gpu-process-crashed", (event) => {
+    logger.error("GPU 进程崩溃:", event);
+  });
+
+  app.on("child-process-gone", (event, details) => {
+    if (details.type !== "GPU") {
+      logger.warn(`子进程退出: ${details.type}, 原因: ${details.reason}`);
+    }
   });
 
   app.on("window-all-closed", (event) => {
