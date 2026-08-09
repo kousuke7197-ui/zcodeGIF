@@ -146,6 +146,65 @@
             </label>
           </div>
         </div>
+
+        <div class="field-group">
+          <div class="range-label">
+            <label>旋转角度</label>
+            <output id="rotationValue">0°</output>
+          </div>
+          <div class="rotation-options" id="rotationOptions">
+            <button type="button" class="rotation-btn" data-rotation="0">0°</button>
+            <button type="button" class="rotation-btn" data-rotation="90">90°</button>
+            <button type="button" class="rotation-btn" data-rotation="180">180°</button>
+            <button type="button" class="rotation-btn" data-rotation="270">270°</button>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <div class="range-label">
+            <label for="smoothnessInput">跟随平滑度</label>
+            <output id="smoothnessValue">0.18</output>
+          </div>
+          <input id="smoothnessInput" type="range" min="0.05" max="0.5" step="0.01" value="0.18">
+          <p class="tip">数值越大跟随越快，越小越柔和</p>
+        </div>
+
+        <label class="switch-row">
+          <span>
+            <strong>点击粒子特效</strong>
+            <small>点击鼠标时显示星星粒子</small>
+          </span>
+          <input id="clickEffectInput" class="switch-input" type="checkbox">
+          <span class="switch-ui" aria-hidden="true"></span>
+        </label>
+      </div>
+
+      <!-- 帧截取 -->
+      <div class="card">
+        <div class="field-group">
+          <div class="range-label">
+            <label>帧截取</label>
+            <output id="frameCountValue">加载中…</output>
+          </div>
+          <p class="tip">设置播放的起始帧和结束帧，截取 GIF 片段循环播放</p>
+        </div>
+        <div class="field-group">
+          <div class="range-label">
+            <label for="frameStartInput">起始帧</label>
+            <output id="frameStartValue">0</output>
+          </div>
+          <input id="frameStartInput" type="range" min="0" max="0" step="1" value="0">
+        </div>
+        <div class="field-group">
+          <div class="range-label">
+            <label for="frameEndInput">结束帧</label>
+            <output id="frameEndValue">0</output>
+          </div>
+          <input id="frameEndInput" type="range" min="0" max="0" step="1" value="0">
+        </div>
+        <div class="settings-io">
+          <button type="button" class="io-button" id="resetFrameBtn">重置帧范围</button>
+        </div>
       </div>
 
       <!-- 系统设置 -->
@@ -166,6 +225,20 @@
           <input id="autoStartInput" class="switch-input" type="checkbox">
           <span class="switch-ui" aria-hidden="true"></span>
         </label>
+
+        <div class="field-group shortcut-field">
+          <div class="range-label">
+            <label for="shortcutInput">全局快捷键</label>
+            <button type="button" class="shortcut-record-btn" id="shortcutRecordBtn">重新录制</button>
+          </div>
+          <input id="shortcutInput" type="text" value="⌘ + Shift + G" readonly>
+          <p class="tip" id="shortcutTip">点击"重新录制"后按下新的快捷键组合</p>
+        </div>
+
+        <div class="settings-io">
+          <button type="button" class="io-button" id="exportSettingsBtn">导出设置</button>
+          <button type="button" class="io-button" id="importSettingsBtn">导入设置</button>
+        </div>
       </div>
 
       <!-- 预设 -->
@@ -179,6 +252,20 @@
         <p class="group-title">本地 GIF 库</p>
         <div class="library-grid" id="libraryGrid"></div>
         <p class="tip">这里的 GIF 已复制进应用本地库，原始文件删除也不会丢失。</p>
+      </div>
+
+      <!-- 伴生 GIF -->
+      <div class="card">
+        <p class="group-title">伴生 GIF</p>
+        <p class="tip">添加额外的 GIF 跟随鼠标，打造多角色效果（最多 5 个）</p>
+        <div class="companion-add-area">
+          <select id="companionSelect" class="companion-select">
+            <option value="">选择 GIF…</option>
+          </select>
+          <button type="button" class="io-button" id="addCompanionBtn">添加</button>
+        </div>
+        <div class="companion-list" id="companionList"></div>
+        <p class="tip" id="companionTip"></p>
       </div>
 
       <button class="reset-button" id="resetButton" type="button">恢复默认设置</button>

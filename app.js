@@ -22,6 +22,9 @@
     opacity: 100,
     flipH: false,
     flipV: false,
+    rotation: 0,
+    smoothness: 0.18,
+    clickEffect: false,
     darkMode: false,
     panelCollapsed: false
   };
@@ -49,7 +52,12 @@
     panel: document.getElementById("controlPanel"),
     panelToggle: document.getElementById("panelToggle"),
     panelStatus: document.getElementById("panelStatus"),
-    toggleFromHero: document.getElementById("toggleFromHero")
+    toggleFromHero: document.getElementById("toggleFromHero"),
+    rotationValue: document.getElementById("rotationValue"),
+    rotationButtons: document.querySelectorAll(".rotation-btn"),
+    smoothnessInput: document.getElementById("smoothnessInput"),
+    smoothnessValue: document.getElementById("smoothnessValue"),
+    clickEffectInput: document.getElementById("clickEffectInput")
   };
 
   const pointer = {
@@ -110,6 +118,9 @@
     settings.enabled = Boolean(settings.enabled);
     settings.flipH = Boolean(settings.flipH);
     settings.flipV = Boolean(settings.flipV);
+    settings.rotation = clampNumber(settings.rotation, 0, 360, DEFAULT_SETTINGS.rotation);
+    settings.smoothness = clampNumber(settings.smoothness, 0.05, 0.5, DEFAULT_SETTINGS.smoothness);
+    settings.clickEffect = Boolean(settings.clickEffect);
     settings.darkMode = Boolean(settings.darkMode);
     settings.panelCollapsed = Boolean(settings.panelCollapsed);
     settings.src = settings.src || DEFAULT_SETTINGS.src;
@@ -139,6 +150,12 @@
     dom.flipH.checked = settings.flipH;
     dom.flipV.checked = settings.flipV;
     dom.darkMode.checked = settings.darkMode;
+
+    dom.smoothnessInput.value = String(settings.smoothness);
+    dom.smoothnessValue.value = String(settings.smoothness);
+    dom.clickEffectInput.checked = settings.clickEffect;
+    dom.rotationValue.textContent = `${settings.rotation}°`;
+    updateRotationButtons();
 
     document.body.setAttribute("data-theme", settings.darkMode ? "dark" : "light");
 
@@ -216,7 +233,7 @@
   }
 
   function animateFollower() {
-    const ease = 0.18;
+    const ease = settings.smoothness || 0.18;
     pointer.currentX += (pointer.targetX - pointer.currentX) * ease;
     pointer.currentY += (pointer.targetY - pointer.currentY) * ease;
 
@@ -225,8 +242,105 @@
     const flipX = settings.flipH ? -1 : 1;
     const flipY = settings.flipV ? -1 : 1;
 
-    dom.follower.style.transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -50%) scale(${flipX}, ${flipY})`;
+    dom.follower.style.transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -50%) scale(${flipX}, ${flipY}) rotate(${settings.rotation}deg)`;
+
+    updateParticles();
     requestAnimationFrame(animateFollower);
+  }
+
+  function updateRotationButtons() {
+    dom.rotationButtons.forEach((button) => {
+      const active = Number(button.dataset.rotation) === settings.rotation;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+  }
+
+  const particles = [];
+  let particleCanvas = null;
+  let particleCtx = null;
+
+  function createParticleCanvas() {
+    particleCanvas = document.createElement("canvas");
+    particleCanvas.id = "particleCanvas";
+    particleCanvas.width = window.innerWidth;
+    particleCanvas.height = window.innerHeight;
+    particleCtx = particleCanvas.getContext("2d");
+    document.body.appendChild(particleCanvas);
+
+    window.addEventListener("resize", () => {
+      particleCanvas.width = window.innerWidth;
+      particleCanvas.height = window.innerHeight;
+    });
+  }
+
+  function spawnParticles(x, y) {
+    const count = 6 + Math.floor(Math.random() * 3);
+    const colors = ["#ffd700", "#ff69b4", "#58a6ff", "#34c759", "#ff7e5f"];
+    const now = performance.now();
+    for (let i = 0; i < count; i++) {
+      const angle = (Math.PI * 2 * i) / count + Math.random() * 0.6;
+      const speed = 2 + Math.random() * 3;
+      particles.push({
+        x: x,
+        y: y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        born: now,
+        life: 1,
+        size: 8 + Math.random() * 6,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        rotation: Math.random() * Math.PI
+      });
+    }
+  }
+
+  function drawStar(ctx, particle) {
+    ctx.save();
+    ctx.translate(particle.x, particle.y);
+    ctx.rotate(particle.rotation);
+    ctx.globalAlpha = Math.max(0, particle.life);
+    ctx.fillStyle = particle.color;
+    ctx.beginPath();
+    const outer = particle.size * particle.life;
+    const inner = outer * 0.4;
+    for (let i = 0; i < 5; i++) {
+      const outerAngle = (Math.PI * 2 * i) / 5 - Math.PI / 2;
+      const innerAngle = outerAngle + Math.PI / 5;
+      const method = i === 0 ? "moveTo" : "lineTo";
+      ctx[method](Math.cos(outerAngle) * outer, Math.sin(outerAngle) * outer);
+      ctx.lineTo(Math.cos(innerAngle) * inner, Math.sin(innerAngle) * inner);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function updateParticles() {
+    if (!particleCtx) {
+      return;
+    }
+    particleCtx.clearRect(0, 0, particleCanvas.width, particleCanvas.height);
+    const now = performance.now();
+    const duration = 500;
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const particle = particles[i];
+      const elapsed = now - particle.born;
+      particle.life = 1 - elapsed / duration;
+
+      if (particle.life <= 0) {
+        particles.splice(i, 1);
+        continue;
+      }
+
+      particle.x += particle.vx;
+      particle.y += particle.vy;
+      particle.vy += 0.12;
+      particle.vx *= 0.98;
+      particle.rotation += 0.12;
+
+      drawStar(particleCtx, particle);
+    }
   }
 
   function handleUpload(event) {
@@ -339,11 +453,64 @@
       dom.upload.value = "";
       applySettings(true);
     });
+
+    dom.rotationButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        settings.rotation = Number(button.dataset.rotation);
+        applySettings(true);
+      });
+    });
+
+    dom.smoothnessInput.addEventListener("input", () => {
+      settings.smoothness = Number(dom.smoothnessInput.value);
+      applySettings(true);
+    });
+
+    dom.clickEffectInput.addEventListener("change", () => {
+      settings.clickEffect = dom.clickEffectInput.checked;
+      applySettings(true);
+    });
+
+    document.addEventListener("click", (event) => {
+      if (!settings.clickEffect) {
+        return;
+      }
+      spawnParticles(event.clientX, event.clientY);
+    });
+
+    // 拖拽上传
+    document.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      document.body.classList.add("drag-over");
+    });
+    document.addEventListener("dragleave", (event) => {
+      if (event.relatedTarget === null) {
+        document.body.classList.remove("drag-over");
+      }
+    });
+    document.addEventListener("drop", (event) => {
+      event.preventDefault();
+      document.body.classList.remove("drag-over");
+      const file = event.dataTransfer.files[0];
+      if (!file || !file.type.startsWith("image/")) {
+        return;
+      }
+      const reader = new FileReader();
+      reader.addEventListener("load", () => {
+        settings.src = String(reader.result || "");
+        settings.name = file.name || "本地 GIF";
+        settings.presetId = "custom";
+        applySettings(true);
+        dom.uploadTip.textContent = "拖拽上传成功！";
+      });
+      reader.readAsDataURL(file);
+    });
   }
 
   function init() {
     renderPresetButtons();
     bindEvents();
+    createParticleCanvas();
     applySettings(false);
     animateFollower();
   }
