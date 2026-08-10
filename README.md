@@ -90,13 +90,15 @@ gif-mouse-follower/
 
 直接双击打开 `index.html` 即可使用。也可以用任意静态服务器运行，例如 VS Code 的 Live Server。
 
-## macOS 桌面版本地运行
+## 从源码运行（开发者）
+
+> 普通用户不需要这一节——直接去 [Releases](https://github.com/kousuke7197-ui/zcodeGIF/releases/latest) 下载 dmg 即可，无需安装 Node.js。以下步骤仅面向想修改代码的开发者。
 
 1. 在 Mac 上安装 Node.js LTS 版本：https://nodejs.org/
 2. 双击 `scripts/start-mac.command`。
 3. 第一次启动会自动安装依赖，之后会打开控制面板，并在任意软件界面显示全局 GIF 跟随效果。
 
-## 生成 macOS 安装包
+## 自行打包 macOS 安装包（开发者）
 
 1. 在 Mac 上双击 `scripts/build-mac-installer.command`。
 2. 等待打包完成，系统会自动打开 `dist` 文件夹。
