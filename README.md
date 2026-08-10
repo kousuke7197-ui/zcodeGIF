@@ -1,9 +1,24 @@
 # gif-mouse-follower
 
+[![下载 macOS 版](https://img.shields.io/badge/下载-macOS%20%E6%A1%8C%E9%9D%A2%E7%89%88-brightgreen?style=for-the-badge&logo=apple)](https://github.com/kousuke7197-ui/zcodeGIF/releases/latest)
+[![在线体验网页版](https://img.shields.io/badge/在线体验-%E7%BD%91%E9%A1%B5%E7%89%88-blue?style=for-the-badge&logo=githubpages)](https://kousuke7197-ui.github.io/zcodeGIF/)
+[![Release](https://img.shields.io/github/v/release/kousuke7197-ui/zcodeGIF?style=flat-square)](https://github.com/kousuke7197-ui/zcodeGIF/releases/latest)
+
 一个 GIF 鼠标跟随自定义工具，同时包含两个版本：
 
 - 网页版：纯 `HTML + CSS + 原生 JavaScript`，无框架、无依赖、无后端，可直接部署到 GitHub Pages。
 - macOS 桌面版：基于 Electron，启动后 GIF 会在系统桌面全局跟随鼠标，切换到任意软件也会一直存在。
+
+## 下载安装（macOS 桌面版）
+
+👉 **[前往 Releases 页面下载最新版](https://github.com/kousuke7197-ui/zcodeGIF/releases/latest)**
+
+| 文件 | 适用机型 |
+|---|---|
+| `GIF.Mouse.Follower-x.x.x-arm64.dmg` | Apple 芯片（M1/M2/M3/M4） |
+| `GIF.Mouse.Follower-x.x.x.dmg` | Intel 芯片 |
+
+> 应用未做 Apple 签名公证，首次打开会被系统拦截：**右键点击 App 图标 → 打开 → 在弹窗中再点「打开」**，之后即可正常双击使用。
 
 ## 功能
 
